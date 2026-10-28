@@ -148,9 +148,12 @@ function makeDetails(){
  const pendingBranches=new Set(nextDOs.map(x=>canonicalBranch(x.branch)));
  importedDetails.forEach(x=>{if(pendingBranches.has(canonicalBranch(x.branch))&&!nextDOs.some(n=>doIdentity(n)===doIdentity(x)))nextDOs.push({...x});});
  const combined=new Map();
- [...nextDOs.filter(x=>!manualKeys.has(doIdentity(x))),...importedDetails].forEach(x=>{const k=doIdentity(x);if(!combined.has(k))combined.set(k,{...x});else if(importedDetails.includes(x)&&!nextDOs.some(n=>doIdentity(n)===k)){const g=combined.get(k);g.eks=x.eks;g.koli=x.koli;g.kg=x.kg;g.ton=x.ton;g.status=x.status;}});
- // Gabungkan DO tambahan manual ke data detail utama agar otomatis masuk Rencana Kirim dan total cabang.
- [...manualDOs].forEach(x=>{const k=doIdentity(x);if(!combined.has(k))combined.set(k,{...x,status:x.status||'DO manual / urgent',manualEntry:true,ton:(Number(x.kg)||0)/1000});});
+ // Detail utama dan realisasi hanya memakai DO sumber + DO manual.
+ // nextDOs (hasil sisa) tidak boleh membuat cabang/baris tambahan di Realisasi.
+ [...importedDetails,...manualDOs].forEach(x=>{
+  const k=doIdentity(x);
+  if(!combined.has(k))combined.set(k,{...x,status:x.status||(x.manualEntry?'DO manual / urgent':''),manualEntry:!!x.manualEntry,ton:(Number(x.kg)||0)/1000});
+ });
  detailRows=[...combined.values()].sort((a,b)=>a.date.localeCompare(b.date)||compareBranches(a.branch,b.branch)||a.doNo.localeCompare(b.doNo));
  try{saveExtraDOs()}catch(e){}
  let bg=new Map();
@@ -205,13 +208,25 @@ function makeDetails(){
   const found=Object.keys(realState||{}).find(k=>{const p=k.split('|');return p[0]===date&&canonicalBranch(p.slice(1).join('|'))===canonicalBranch(branch)});
   return found?realState[found]||{}:{};
  };
+ const nextDay=date=>{
+  const m=String(date||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!m)return date;
+  const d=new Date(Date.UTC(Number(m[1]),Number(m[2])-1,Number(m[3])+1));
+  return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0');
+ };
+ // Rencana memakai DO sumber yang belum terkirim. Bila tanggal 28 sudah direalisasikan,
+ // sisa dipindah ke tanggal rencana berikutnya (29), bukan ditumpuk ke tanggal lama.
  detailRows.forEach(d=>{
   const rz=realEntryFor(d.date,d.branch);
   const shipped=Array.isArray(rz.shippedDONumbers)&&rz.shippedDONumbers.map(String).includes(String(d.doNo));
   if(rz.reconciledSignature&&shipped)return;
-  const key=d.date+'|'+d.branch;
-  if(!pendingMap.has(key))pendingMap.set(key,{date:d.date,branch:d.branch,dos:new Set(),eks:0,koli:0,kg:0,statuses:new Set()});
-  const g=pendingMap.get(key);g.dos.add(String(d.doNo));g.eks+=Number(d.eks)||0;g.koli+=Number(d.koli)||0;g.kg+=Number(d.kg)||0;
+  const planDate=rz.dispatchStatus==='today'&&rz.reconciledSignature?nextDay(d.date):d.date;
+  const key=planDate+'|'+d.branch;
+  if(!pendingMap.has(key))pendingMap.set(key,{date:planDate,branch:d.branch,dos:new Set(),eks:0,koli:0,kg:0,statuses:new Set()});
+  const g=pendingMap.get(key);
+  const id=String(d.doNo);
+  if(g.dos.has(id))return;
+  g.dos.add(id);g.eks+=Number(d.eks)||0;g.koli+=Number(d.koli)||0;g.kg+=Number(d.kg)||0;
   String(d.status||'').split(', ').filter(Boolean).forEach(st=>g.statuses.add(st));
  });
  planRows=[...pendingMap.values()].map(g=>({...g,doCount:g.dos.size,ton:g.kg/1000,status:[...g.statuses].join(', ')}));
