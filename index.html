@@ -220,7 +220,7 @@ function makeDetails(){
   const rz=realEntryFor(d.date,d.branch);
   const shipped=Array.isArray(rz.shippedDONumbers)&&rz.shippedDONumbers.map(String).includes(String(d.doNo));
   if(rz.reconciledSignature&&shipped)return;
-  const planDate=rz.dispatchStatus==='today'&&rz.reconciledSignature?nextDay(d.date):d.date;
+  const planDate=rz.reconciledSignature?nextDay(d.date):d.date;
   const key=planDate+'|'+d.branch;
   if(!pendingMap.has(key))pendingMap.set(key,{date:planDate,branch:d.branch,dos:new Set(),eks:0,koli:0,kg:0,statuses:new Set()});
   const g=pendingMap.get(key);
