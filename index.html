@@ -67,6 +67,9 @@ function branchName(v,warehouse2=''){let name=String(v??'').trim().replace(/^\s*
 function normalizeStatus(v){let s=String(v??'').trim().toUpperCase().replace(/[_-]+/g,' ');if(s==='OPEN ORDER')return 'OPEN ORDER';if(s==='CLOSED')return 'CLOSED';return s}
 function filteredSource(){let wh=$('warehouse').value,st=$('statusFilter').value,dt=$('dateFilter').value;return raw.filter(r=>{let w=String(val(r,['warehouse','gudang'])).trim(),s=normalizeStatus(val(r,['status'])),d=dateKey(val(r,['date','tanggal','delivery date']));let okStatus=st==='all'||(st==='both'&&(s==='OPEN ORDER'||s==='CLOSED'))||s===st;return(wh==='all'||!w||w===wh)&&okStatus&&(!dt||!d||dt===d)})}
 function canonicalBranch(name){let n=String(name||'').toUpperCase().replace(/\s+/g,' ').trim();if(n==='P. SIANTAR'||n==='P.SIANTAR'||n==='SIANTAR')return 'P.SIANTAR';if(n==='PAPUA'||n==='PAPUA/JLN SUCI'||n==='PAPUA / JLN SUCI')return 'PAPUA/JLN SUCI';if(n==='SURAKARTA'||n==='SURAKARTA/MDU')return 'SURAKARTA/MDU';if(n==='BALI (KUPANG)')return 'KUPANG';return n}
+ const BRANCH_ORDER=['SURABAYA','BALI','MALANG','SURAKARTA/MDU','SEMARANG','YOGYAKARTA','CIREBON','BANDUNG','MEDAN','ACEH','P.SIANTAR','PEKANBARU','PADANG','PALEMBANG','LAMPUNG','MAKASSAR','MANADO','SAMARINDA','BANJARMASIN','PONTIANAK','KUPANG','PAPUA/JLN SUCI','BEKASI','BOGOR','BANTEN','JAKARTA DIRECT','JAKARTA RETAIL'];
+ function branchOrderIndex(name){let n=canonicalBranch(name);if(n==='JAKARTA DIREK')n='JAKARTA DIRECT';let i=BRANCH_ORDER.indexOf(n);return i<0?BRANCH_ORDER.length:i}
+ function compareBranches(a,b){let d=branchOrderIndex(a)-branchOrderIndex(b);return d||String(a).localeCompare(String(b))}
 
 function estimateTransit(branch){let n=canonicalBranch(branch);const days={
 'SURABAYA':'3 hari','BALI':'5 hari','MALANG':'3 hari','SURAKARTA/MDU':'3 hari','SEMARANG':'2 hari','YOGYAKARTA':'2 hari','CIREBON':'1 hari','BANDUNG':'1 hari',
@@ -146,7 +149,7 @@ function makeDetails(){
  [...nextDOs.filter(x=>!manualKeys.has(doIdentity(x))),...importedDetails].forEach(x=>{const k=doIdentity(x);if(!combined.has(k))combined.set(k,{...x});else if(importedDetails.includes(x)){const g=combined.get(k);g.eks=x.eks;g.koli=x.koli;g.kg=x.kg;g.ton=x.ton;g.status=x.status;}});
  // Gabungkan DO tambahan manual ke data detail utama agar otomatis masuk Rencana Kirim dan total cabang.
  [...manualDOs].forEach(x=>{const k=doIdentity(x);if(!combined.has(k))combined.set(k,{...x,status:x.status||'DO manual / urgent',manualEntry:true,ton:(Number(x.kg)||0)/1000});});
- detailRows=[...combined.values()].sort((a,b)=>a.date.localeCompare(b.date)||a.branch.localeCompare(b.branch)||a.doNo.localeCompare(b.doNo));
+ detailRows=[...combined.values()].sort((a,b)=>a.date.localeCompare(b.date)||compareBranches(a.branch,b.branch)||a.doNo.localeCompare(b.doNo));
  try{saveExtraDOs()}catch(e){}
  let bg=new Map();
  detailRows.forEach(d=>{
@@ -185,13 +188,13 @@ function makeDetails(){
  });
  // Jakarta ditampilkan sebagai dua cabang manual. Angka rencana sengaja dikosongkan.
  branchRows=[];
- baseRows.forEach(g=>{if(/JAKARTA/i.test(g.branch)){['JAKARTA DIREK','JAKARTA RETAIL'].forEach(n=>branchRows.push({...g,branch:n,doCount:0,eks:0,koli:0,kg:0,ton:0,status:'',manualJakarta:true}));}else branchRows.push(g)});
+ baseRows.forEach(g=>{if(/JAKARTA/i.test(g.branch)){['JAKARTA DIRECT','JAKARTA RETAIL'].forEach(n=>branchRows.push({...g,branch:n,doCount:0,eks:0,koli:0,kg:0,ton:0,status:'',manualJakarta:true}));}else branchRows.push(g)});
  branchRows=branchRows.map(g=>{let up=unitPlan(g.branch,g.kg);return {...g,unitType:up.label,unitDetail:up.detail,loadingStage:loadingStage(g.branch)}});
- branchRows.sort((a,b)=>a.date.localeCompare(b.date)||a.branch.localeCompare(b.branch));
+ branchRows.sort((a,b)=>a.date.localeCompare(b.date)||compareBranches(a.branch,b.branch));
 }
 function fillSelect(id,items,allLabel){let el=$(id),old=el.value;el.innerHTML='<option value="all">'+allLabel+'</option>'+items.map(v=>'<option value="'+esc(v)+'">'+esc(v)+'</option>').join('');if(items.includes(old))el.value=old}
 function renderAll(){
- makeDetails();let branchNames=[...new Set(branchRows.map(x=>x.branch))].sort();fillSelect('realBranch',branchNames,'Semua cabang');fillSelect('detailBranch',[...new Set(detailRows.map(x=>x.branch))].sort(),'Semua cabang');
+ makeDetails();let branchNames=[...new Set(branchRows.map(x=>x.branch))].sort(compareBranches);fillSelect('realBranch',branchNames,'Semua cabang');fillSelect('detailBranch',[...new Set(detailRows.map(x=>x.branch))].sort(compareBranches),'Semua cabang');
  $('sBranch').textContent=fmt(new Set(branchRows.map(x=>x.branch)).size);$('sDO').textContent=fmt(new Set(detailRows.map(x=>x.doNo)).size);$('sQty').textContent=fmt(detailRows.reduce((s,x)=>s+x.eks,0));$('sKoli').textContent=fmt(detailRows.reduce((s,x)=>s+x.koli,0));let kg=detailRows.reduce((s,x)=>s+x.kg,0);$('sKg').textContent=fmt(kg);$('sTon').textContent=fmtTon(kg/1000);
  const totalDO=new Set(detailRows.map(x=>String(x.doNo||'').trim().toUpperCase()).filter(Boolean)).size;
  const totalEks=detailRows.reduce((sum,x)=>sum+(Number(x.eks)||0),0), totalKoli=detailRows.reduce((sum,x)=>sum+(Number(x.koli)||0),0), totalKg=detailRows.reduce((sum,x)=>sum+(Number(x.kg)||0),0);
