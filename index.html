@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rencana Kirim Gudang Pusat</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f4f6f8;color:#1f2937;font:14px Arial,sans-serif}header{background:#193650;color:#fff;padding:18px 22px}header h1{margin:0;font-size:22px}header p{margin:6px 0 0;color:#dce7f1}main{max-width:1250px;margin:20px auto;padding:0 14px}.nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}.nav button{padding:11px 14px;border:1px solid #d5dde7;border-radius:7px;background:#fff;color:#193650;font-weight:bold;cursor:pointer}.nav button.active{background:#2457c5;color:#fff;border-color:#2457c5}.panel{background:#fff;border:1px solid #dce2e9;border-radius:9px;padding:16px;margin-bottom:14px}.panel h2{font-size:18px;margin:0 0 12px}.row{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:12px}input,select{font:inherit;padding:8px;border:1px solid #cbd5e1;border-radius:6px;max-width:100%}button.action{background:#2457c5;color:#fff;border:0;border-radius:6px;padding:10px 13px;font:inherit;cursor:pointer}.hint{color:#64748b;margin:0 0 12px}.msg{padding:10px;border-radius:6px;background:#eff6ff;color:#1d4ed8;margin:10px 0}.msg.error{background:#fef2f2;color:#b91c1c}.msg.success{background:#f0fdf4;color:#166534}.stats{display:flex;gap:9px;flex-wrap:wrap;margin:12px 0}.stat{border:1px solid #dce2e9;border-radius:7px;padding:10px 12px;min-width:110px;flex:1}.stat span{display:block;color:#64748b;font-size:12px}.stat b{font-size:19px;display:block;margin-top:5px}.tablewrap{overflow:auto;border:1px solid #dce2e9;border-radius:7px}.total-row{background:#e8eef6;font-weight:700}.total-summary{display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:10px;margin-top:12px}.total-card{border:1px solid #cbd5e1;border-left:5px solid #2457c5;border-radius:7px;background:#f8fafc;padding:12px 14px}.total-card span{display:block;color:#475569;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}.total-card strong{display:block;font-size:22px;color:#142b4a;margin-top:5px}@media(max-width:650px){.total-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}table{border-collapse:collapse;width:100%;min-width:850px}th,td{padding:9px 10px;border-bottom:1px solid #e5eaf0;text-align:left;white-space:nowrap}th{background:#f0f4f8;font-size:12px;color:#334155;position:sticky;top:0}td.num,th.num{text-align:right}.empty{text-align:center;color:#64748b;padding:24px}section.page[hidden]{display:none!important}.foot{font-size:12px;color:#64748b;margin:12px 0}.small{font-size:12px;color:#64748b}@media(max-width:600px){header h1{font-size:19px}.panel{padding:12px}.nav button{flex:1}}
+</style></head><body>
+<header><h1>Rencana Kirim Gudang Pusat</h1><p>Rencana per cabang, realisasi pengiriman, laporan, dan detail per DO</p></header>
+<main>
+<nav class="nav">
+<button class="active" data-page="rencana">Rencana Kirim</button>
+<button data-page="realisasi">Realisasi Kirim</button>
+<button data-page="laporan">Laporan Kiriman</button>
+<button data-page="detail">Detail DO per Cabang</button>
+</nav>
+<section id="rencana" class="page">
+<div class="panel"><h2>Impor Excel</h2><p class="hint">Ketentuan impor: Warehouse 50; status Open Order dan Closed. Jenis unit dan tahapan loading diisi otomatis berdasarkan cabang dan total KG. Untuk rekomendasi kontainer vs kapal cepat, biaya dibandingkan sebagai perkiraan dan wajib divalidasi terlebih dahulu, terutama jika barang urgent.</p>
+<div class="row"><input id="file" type="file" accept=".xlsx,.xls,.xlsm"><button id="import" class="action">Impor Excel</button><label>Lembar Excel <select id="sheet" disabled><option>Pilih file dahulu</option></select></label></div>
+<div id="msg" class="msg">Pilih file Excel lalu klik Impor Excel. Disarankan impor file sumber asli, bukan hasil screenshot atau PDF.</div>
+<div class="row"><label>Tanggal <input type="date" id="dateFilter"></label><label>Warehouse <select id="warehouse"><option value="50">50</option><option value="all">Semua</option></select></label><label>Status <select id="statusFilter"><option value="both">Open Order + Closed</option><option value="OPEN ORDER">Open Order saja</option><option value="CLOSED">Closed saja</option><option value="all">Semua status</option></select></label><button id="clear" class="action">Bersihkan Data</button></div>
+<div class="stats"><div class="stat"><span>Jumlah cabang</span><b id="sBranch">0</b></div><div class="stat"><span>DO unik</span><b id="sDO">0</b></div><div class="stat"><span>Total EKS</span><b id="sQty">0</b></div><div class="stat"><span>Total Koli</span><b id="sKoli">0</b></div><div class="stat"><span>Total KG</span><b id="sKg">0</b></div><div class="stat"><span>Total Tonase (ton)</span><b id="sTon">0</b></div></div>
+
+<div class="row pdf-toolbar"><h3>Rekap rencana per cabang dan tanggal</h3><button type="button" class="action pdf-export" data-pdf="branchBody" data-title="Rencana Kirim">Download Gambar Rencana</button></div><div class="tablewrap"><table><thead><tr><th>No.</th><th>Tanggal</th><th>Cabang</th><th>Jumlah DO</th><th>EKS</th><th>Koli</th><th>KG</th><th>Tonase (ton)</th><th>Jenis Unit</th><th>Tahapan Loading</th><th>Status Sumber</th></tr></thead><tbody id="branchBody"><tr><td colspan="11" class="empty">Belum ada data.</td></tr></tbody></table></div><div class="total-summary" id="branchTotalSummary"><div class="total-card"><span>Total Jumlah DO</span><strong id="totalDOValue">0</strong></div><div class="total-card"><span>Total EKS</span><strong id="totalEksValue">0</strong></div><div class="total-card"><span>Total Koli</span><strong id="totalKoliValue">0</strong></div><div class="total-card"><span>Total KG</span><strong id="totalKgValue">0</strong></div></div>
+</div></section>
+<section id="realisasi" class="page" hidden><div class="panel"><h2>Realisasi Kirim</h2><p class="hint">Realisasi ditampilkan total per cabang, bukan per DO. Jumlah DO bisa diedit untuk semua cabang. Nomor surat jalan dan estimasi lama pengiriman juga bisa diisi atau diubah, misalnya "3 hari". Jenis unit terisi otomatis sebagai saran, tetapi bisa diedit sesuai kondisi lapangan. Kolom Konfirmasi Kiriman meminta validasi apakah kiriman benar dikirim hari ini atau masuk jadwal kiriman berikutnya. Tahapan loading tetap mengikuti aturan otomatis. Perbandingan biaya kontainer/kapal cepat perlu validasi, terutama jika barang urgent.</p><div class="row"><label>Tanggal <input type="date" id="realDate"></label><label>Cabang <select id="realBranch"><option value="all">Semua cabang</option></select></label><button id="saveReal" class="action">Simpan Realisasi</button><button type="button" class="action pdf-export" data-pdf="realBody" data-title="Realisasi Kirim">Download Gambar Realisasi</button></div><div id="realMsg" class="hint">Pilih tanggal untuk melihat total realisasi tiap cabang. Jakarta Direk dan Jakarta Retail diisi manual.</div><div class="tablewrap"><table><thead><tr><th>No.</th><th>Tanggal</th><th>Cabang</th><th>Jumlah DO</th><th>Jumlah EKS</th><th>Koli</th><th>KG</th><th>Tonase (ton)</th><th>Jenis Unit</th><th>Tahapan Loading</th><th>No. Surat Jalan</th><th>Estimasi Tiba</th><th>Konfirmasi Kiriman</th></tr></thead><tbody id="realBody"><tr><td colspan="13" class="empty">Impor data di menu Rencana Kirim terlebih dahulu.</td></tr></tbody></table></div></div></section>
+<section id="laporan" class="page" hidden><div class="panel"><h2>Laporan Kiriman per Cabang</h2><p class="hint">Ringkasan per cabang, termasuk surat jalan, estimasi tiba, dan status kiriman.</p><div class="row"><label>Tanggal <input type="date" id="reportDate"></label><button id="exportReport" class="action">Ekspor laporan CSV</button><button type="button" class="action pdf-export" data-pdf="reportBody" data-title="Laporan Kiriman">Download Gambar Laporan</button></div><div class="tablewrap"><table><thead><tr><th>No.</th><th>Tanggal</th><th>Cabang</th><th>Jumlah DO</th><th>EKS</th><th>Koli</th><th>KG</th><th>Tonase (ton)</th><th>No. Surat Jalan</th><th>Estimasi Tiba</th><th>Status Kiriman</th></tr></thead><tbody id="reportBody"><tr><td colspan="11" class="empty">Belum ada data laporan.</td></tr></tbody></table></div></div></section>
+<section id="detail" class="page" hidden><div class="panel"><h2>Detail DO per Cabang</h2><p class="hint">Menampilkan satu baris per Delivery Order untuk setiap cabang, dengan EKS, Koli, berat dalam KG, dan tonase. DO yang muncul di beberapa baris Excel akan digabung agar tidak terhitung ganda.</p><div class="row"><label>Tanggal <input type="date" id="detailDate"></label><label>Cabang <select id="detailBranch"><option value="all">Semua cabang</option></select></label><label>Cari DO <input id="searchDO" placeholder="Ketik nomor DO"></label><button id="exportDO" class="action">Ekspor detail DO CSV</button><div class="row" style="width:100%;margin-top:8px"><strong>Tambah DO manual (urgent):</strong><label>Tanggal <input type="date" id="manualDate"></label><label>Cabang <input id="manualBranch" placeholder="Nama cabang"></label><label>Nomor DO <input id="manualDo" placeholder="Nomor DO"></label><label>EKS <input type="number" min="0" id="manualEks" value="0" style="width:90px"></label><label>Koli <input type="number" min="0" id="manualKoli" value="0" style="width:90px"></label><label>Weight (gram) <input type="number" min="0" id="manualWeight" value="0" style="width:100px"></label><button id="addManualDO" class="action">Tambah DO</button></div><p class="small">DO manual disimpan di browser. Jika nomor DO ini muncul saat impor Excel berikutnya, baris impor tersebut akan diabaikan agar tidak terhitung ganda.</p></div><div class="stats"><div class="stat"><span>DO unik</span><b id="dDO">0</b></div><div class="stat"><span>Total EKS</span><b id="dQty">0</b></div><div class="stat"><span>Total Koli</span><b id="dKoli">0</b></div><div class="stat"><span>Total KG</span><b id="dKg">0</b></div><div class="stat"><span>Tonase (ton)</span><b id="dTon">0</b></div></div><div class="tablewrap"><table><thead><tr><th>No.</th><th>Tanggal</th><th>Cabang</th><th>Delivery Order</th><th>EKS</th><th>Koli</th><th>KG</th><th>Tonase (ton)</th><th>Status</th></tr></thead><tbody id="detailBody"><tr><td colspan="9" class="empty">Belum ada data.</td></tr></tbody></table></div></div></section>
+<p class="foot">Catatan: perhitungan KG mengikuti rumus (Weight ÷ 1.000) + Total Koli; hasil KG ditampilkan tanpa desimal. Tonase dihitung dari KG ÷ 1.000. Data tersimpan di browser lokal dan belum tersinkron ke komputer lain.</p>
+</main>
+<script>
+(function(){
+const $=id=>document.getElementById(id);let workbook=null,raw=[],headers=[],detailRows=[],branchRows=[],realState={},jakartaRealState={},manualDOs=[],nextDOs=[];
+const KEY='rkgp_v2_realisasi';const JAKARTA_KEY='rkgp_jakarta_manual_real';const MANUAL_DO_KEY='rkgp_manual_detail_do_v1';const NEXT_DO_KEY='rkgp_next_shipment_do_v1';const CARRYOVER_KEY='rkgp_next_shipment_summary_v1';
+const norm=v=>String(v??'').trim().toLowerCase().replace(/[_\s]+/g,' ');
+const fmt=v=>new Intl.NumberFormat('id-ID',{maximumFractionDigits:0}).format(Number(v)||0);
+const fmtTon=v=>new Intl.NumberFormat('id-ID',{minimumFractionDigits:0,maximumFractionDigits:3}).format(Number(v)||0);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function say(t,type=''){ $('msg').textContent=t;$('msg').className='msg'+(type?' '+type:'')}
+function find(names){return headers.find(h=>names.includes(norm(h)))}
+function val(r,names){let h=find(names);return h?r[h]:''}
+function num(v){if(typeof v==='number')return v;let s=String(v??'').trim();if(s.includes(',')&&s.includes('.'))s=s.replace(/\./g,'').replace(',','.');else s=s.replace(',','.');return Number(s)||0}
+function dateKey(v){if(v instanceof Date&&!isNaN(v))return v.getFullYear()+'-'+String(v.getMonth()+1).padStart(2,'0')+'-'+String(v.getDate()).padStart(2,'0');if(typeof v==='number'&&window.XLSX){let d=XLSX.SSF.parse_date_code(v);if(d)return d.y+'-'+String(d.m).padStart(2,'0')+'-'+String(d.d).padStart(2,'0')}let s=String(v??'').trim();if(!s)return '';let m=s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);if(m)return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');return s.slice(0,10)}
+function branchName(v,warehouse2=''){let name=String(v??'').trim().replace(/^\s*\d+\s*[-–]\s*/,'').trim().replace(/^ERLANGGA\s+/i,'').trim();return name||'Tanpa Cabang'}
+function normalizeStatus(v){let s=String(v??'').trim().toUpperCase().replace(/[_-]+/g,' ');if(s==='OPEN ORDER')return 'OPEN ORDER';if(s==='CLOSED')return 'CLOSED';return s}
+function filteredSource(){let wh=$('warehouse').value,st=$('statusFilter').value,dt=$('dateFilter').value;return raw.filter(r=>{let w=String(val(r,['warehouse','gudang'])).trim(),s=normalizeStatus(val(r,['status'])),d=dateKey(val(r,['date','tanggal','delivery date']));let okStatus=st==='all'||(st==='both'&&(s==='OPEN ORDER'||s==='CLOSED'))||s===st;return(wh==='all'||!w||w===wh)&&okStatus&&(!dt||!d||dt===d)})}
+function canonicalBranch(name){let n=String(name||'').toUpperCase().replace(/\s+/g,' ').trim();if(n==='P. SIANTAR'||n==='P.SIANTAR'||n==='SIANTAR')return 'P.SIANTAR';if(n==='PAPUA'||n==='PAPUA/JLN SUCI'||n==='PAPUA / JLN SUCI')return 'PAPUA/JLN SUCI';if(n==='SURAKARTA'||n==='SURAKARTA/MDU')return 'SURAKARTA/MDU';if(n==='BALI (KUPANG)')return 'KUPANG';return n}
+
+function estimateTransit(branch){let n=canonicalBranch(branch);const days={
+'SURABAYA':'3 hari','BALI':'5 hari','MALANG':'3 hari','SURAKARTA/MDU':'3 hari','SEMARANG':'2 hari','YOGYAKARTA':'2 hari','CIREBON':'1 hari','BANDUNG':'1 hari',
+'MEDAN':'6 hari','ACEH':'7 hari','P.SIANTAR':'6 hari','PEKANBARU':'4 hari','PADANG':'4 hari','PALEMBANG':'3 hari','LAMPUNG':'2 hari',
+'MAKASSAR':'8 hari','MANADO':'14 hari','SAMARINDA':'10 hari','BANJARMASIN':'8 hari','PONTIANAK':'7 hari','KUPANG':'12 hari','PAPUA/JLN SUCI':'0 hari',
+'BEKASI':'0 hari','BOGOR':'0 hari','BANTEN':'0 hari','JAKARTA DIRECT':'0 hari','JAKARTA DIREK':'0 hari','JAKARTA RETAIL':'0 hari'};return days[n]||'Belum ditentukan'}
+function loadingStage(branch){let n=canonicalBranch(branch);const stages={
+1:['MAKASSAR','MANADO','SAMARINDA','BANJARMASIN','PONTIANAK','KUPANG'],
+2:['PAPUA/JLN SUCI','BEKASI','BOGOR','BANTEN'],
+3:['MEDAN','ACEH','P.SIANTAR','PEKANBARU','PADANG','PALEMBANG','LAMPUNG'],
+4:['SURABAYA','BALI','MALANG','SURAKARTA/MDU','SEMARANG','YOGYAKARTA','CIREBON','BANDUNG']};
+for(const [stage,names] of Object.entries(stages))if(names.includes(n))return 'Tahap '+stage;return ''}
+function unitPlan(branch,kg){let n=canonicalBranch(branch),w=Number(kg)||0;
+const cfg={
+'MAKASSAR':{unit:'CDE',max:2500,race:'Blindvan',raceMax:700,container:24890685,threshold:13000,rate:4700},
+'SAMARINDA':{unit:'CDD',max:5000,race:'L300',raceMax:900,container:26240525,threshold:13000,rate:4700},
+'BANJARMASIN':{unit:'CDDL',max:6500,race:'Traga',raceMax:1500,container:24541685,threshold:13000,rate:3700},
+'PONTIANAK':{unit:'FUSO',max:10000,race:'CDE',raceMax:2500,container:22094945,threshold:13000,rate:4200},
+'KUPANG':{unit:'WB',max:20000,container:50033810,threshold:11000,rate:8700},
+'MANADO':{unit:'TRONTON',max:29000,container:39500000,threshold:16000,rate:8500}
+};
+if(!w)return {label:'',detail:''};
+if(['SURABAYA','BALI','MALANG','SURAKARTA/MDU','SEMARANG','YOGYAKARTA','CIREBON','BANDUNG'].includes(n))return {label:'CDD',detail:'Unit CDD sesuai ketentuan cabang'};
+if(['MEDAN','ACEH','P.SIANTAR','PEKANBARU','PADANG','PALEMBANG','LAMPUNG'].includes(n))return {label:'TAM',detail:'Unit TAM sesuai ketentuan cabang'};
+const c=cfg[n];if(!c)return {label:'',detail:''};
+if(c.threshold&&w>c.threshold){let fast=w*c.rate,cont=c.container;let cheaper=cont<fast?'Kontainer':'Kapal cepat';let contTxt='Kontainer Rp '+fmt(cont),fastTxt='Kapal cepat Rp '+fmt(fast);return {label:cheaper+' — perlu validasi',detail:contTxt+'; '+fastTxt+'. Pilihan wajib dikonfirmasi sesuai urgensi barang.'}}
+if(c.race&&w<=c.raceMax)return {label:c.race,detail:'KG '+fmt(w)+' berada dalam batas '+c.race+' ('+fmt(c.raceMax)+' KG)'};
+if(w<=c.max)return {label:c.unit,detail:'KG '+fmt(w)+' berada dalam batas '+c.unit+' ('+fmt(c.max)+' KG)'};
+return {label:c.unit+' — validasi kapasitas',detail:'Berat melebihi batas unit '+c.unit+' ('+fmt(c.max)+' KG), tetapi belum melewati ambang perbandingan kontainer/kapal cepat. Mohon validasi kapasitas dan kebutuhan pengiriman.'}
+}
+function makeDetails(){
+ let rs=filteredSource(),
+ b=find(['business entity','branch','cabang']),
+ whouse=find(['warehouse','gudang']),
+ wh2h=find(['warehouse2','warehouse 2']),
+ dh=find(['delivery order','delivery_order','delivery order number','do']),
+ qh=find(['sum of quantity','quantity','eks']),
+ kh=find(['sum of total koli','total koli','koli']),
+ wh=find(['weight','berat','kg']),
+ dateh=find(['date','tanggal','delivery date']),
+ sh=find(['status']);
+ // Tirukan susunan Pivot Excel terlebih dahulu:
+ // ROWS = Business Entity, Warehouse, Date, Delivery Order, Weight
+ // VALUES = Sum of Quantity dan Sum of Total Koli
+ let pivotMap=new Map();
+ rs.forEach(r=>{
+  let sourceBranch=branchName(b?r[b]:'',wh2h?r[wh2h]:''), warehouse=String(whouse?r[whouse]:'').trim(),
+      date=dateKey(dateh?r[dateh]:''), doNo=String(dh?r[dh]:'').trim(),
+      branch=sourceBranch,
+      weight=num(wh?r[wh]:0);
+  if(!doNo)return;
+  let key=JSON.stringify([branch,warehouse,date,doNo,weight]);
+  if(!pivotMap.has(key))pivotMap.set(key,{branch,warehouse,date,doNo,weight,eks:0,koli:0,statuses:new Set()});
+  let g=pivotMap.get(key);
+  g.eks+=num(qh?r[qh]:0);
+  g.koli+=num(kh?r[kh]:0);
+  let st=normalizeStatus(sh?r[sh]:'');if(st)g.statuses.add(st);
+ });
+ // Sesudah dikelompokkan seperti Pivot, hitung Weight/1000 + Sum of Total Koli.
+ let detailMap=new Map();
+ [...pivotMap.values()].forEach(p=>{
+  let key=JSON.stringify([p.date,p.branch,p.doNo]);
+  if(!detailMap.has(key))detailMap.set(key,{date:p.date,branch:p.branch,doNo:p.doNo,eks:0,koli:0,kg:0,statuses:new Set()});
+  let g=detailMap.get(key);
+  g.eks+=p.eks;g.koli+=p.koli;
+  g.kg+=(p.weight/1000)+p.koli;
+  p.statuses.forEach(st=>g.statuses.add(st));
+ });
+ let importedDetails=[...detailMap.values()].map(g=>({...g,kg:Math.round(g.kg),ton:g.kg/1000,status:[...g.statuses].join(', ')}));
+ // DO yang sudah dicatat manual tidak boleh masuk lagi dari Excel.
+ const manualKeys=new Set(manualDOs.map(doIdentity));
+ importedDetails=importedDetails.filter(x=>!manualKeys.has(doIdentity(x)));
+ // Jika cabang memiliki DO tertunda (Next kiriman selanjutnya), DO baru dari impor untuk cabang/tanggal itu ikut masuk antrean dan tetap dibawa ke rencana.
+ const pendingBranches=new Set(nextDOs.map(x=>canonicalBranch(x.branch)));
+ importedDetails.forEach(x=>{if(pendingBranches.has(canonicalBranch(x.branch))&&!nextDOs.some(n=>doIdentity(n)===doIdentity(x)))nextDOs.push({...x});});
+ const combined=new Map();
+ [...nextDOs.filter(x=>!manualKeys.has(doIdentity(x))),...importedDetails].forEach(x=>{const k=doIdentity(x);if(!combined.has(k))combined.set(k,{...x});else if(importedDetails.includes(x)){const g=combined.get(k);g.eks=x.eks;g.koli=x.koli;g.kg=x.kg;g.ton=x.ton;g.status=x.status;}});
+ detailRows=[...combined.values()].sort((a,b)=>a.date.localeCompare(b.date)||a.branch.localeCompare(b.branch)||a.doNo.localeCompare(b.doNo));
+ try{saveExtraDOs()}catch(e){}
+ let bg=new Map();
+ detailRows.forEach(d=>{
+  let key=d.date+'|'+d.branch;
+  if(!bg.has(key))bg.set(key,{date:d.date,branch:d.branch,dos:new Set(),eks:0,koli:0,kg:0,statuses:new Set()});
+  let g=bg.get(key);g.dos.add(d.doNo);g.eks+=d.eks;g.koli+=d.koli;g.kg+=d.kg;
+  d.status.split(', ').filter(Boolean).forEach(st=>g.statuses.add(st));
+ });
+ let baseRows=[...bg.values()].map(g=>({...g,doCount:g.dos.size,ton:g.kg/1000,status:[...g.statuses].join(', ')}));
+ // Antrean tetap yang tidak terkirim pada 27 Oktober 2026. Simpan sekali di browser agar tetap tampil meski belum impor Excel.
+ let carryovers=[];
+ try{carryovers=JSON.parse(localStorage.getItem(CARRYOVER_KEY)||'null');}catch(e){carryovers=null;}
+ if(!Array.isArray(carryovers)||!carryovers.length){carryovers=[
+  {date:'2026-10-27',branch:'SEMARANG',doCount:31,eks:2172,koli:21,kg:724,status:'Next kiriman selanjutnya — sisa 27 Okt',carryover:true},
+  {date:'2026-10-27',branch:'ACEH',doCount:11,eks:379,koli:5,kg:144,status:'Next kiriman selanjutnya — sisa 27 Okt',carryover:true},
+  {date:'2026-10-27',branch:'MANADO',doCount:20,eks:4598,koli:41,kg:1325,status:'Next kiriman selanjutnya — sisa 27 Okt',carryover:true},
+  {date:'2026-10-27',branch:'SAMARINDA',doCount:8,eks:178,koli:16,kg:492,status:'Next kiriman selanjutnya — sisa 27 Okt',carryover:true}
+ ];try{localStorage.setItem(CARRYOVER_KEY,JSON.stringify(carryovers));}catch(e){}}
+ // Tambahkan rekap sisa kiriman ke rencana cabang yang sama, bukan sebagai baris terpisah.
+ // Jika cabang muncul dalam impor baru (mis. Semarang 4 DO), jumlahnya menjadi 31 + 4 = 35 DO.
+ carryovers.forEach(c=>{
+  const matches=baseRows.filter(x=>canonicalBranch(x.branch)===canonicalBranch(c.branch));
+  if(matches.length){
+   // Gabungkan sisa ke baris tanggal impor paling baru untuk cabang tersebut.
+   const target=matches.reduce((a,b)=>String(a.date||'')>=String(b.date||'')?a:b);
+   target.doCount=(Number(target.doCount)||0)+(Number(c.doCount)||0);
+   target.eks=(Number(target.eks)||0)+(Number(c.eks)||0);
+   target.koli=(Number(target.koli)||0)+(Number(c.koli)||0);
+   target.kg=(Number(target.kg)||0)+(Number(c.kg)||0);
+   target.ton=(Number(target.kg)||0)/1000;
+   target.status=[...new Set([target.status,c.status].filter(Boolean))].join(' | ');
+   target.hasCarryover=true;
+  }else{
+   baseRows.push({...c,ton:(Number(c.kg)||0)/1000});
+  }
+ });
+ // Jakarta ditampilkan sebagai dua cabang manual. Angka rencana sengaja dikosongkan.
+ branchRows=[];
+ baseRows.forEach(g=>{if(/JAKARTA/i.test(g.branch)){['JAKARTA DIREK','JAKARTA RETAIL'].forEach(n=>branchRows.push({...g,branch:n,doCount:0,eks:0,koli:0,kg:0,ton:0,status:'',manualJakarta:true}));}else branchRows.push(g)});
+ branchRows=branchRows.map(g=>{let up=unitPlan(g.branch,g.kg);return {...g,unitType:up.label,unitDetail:up.detail,loadingStage:loadingStage(g.branch)}});
+ branchRows.sort((a,b)=>a.date.localeCompare(b.date)||a.branch.localeCompare(b.branch));
+}
+function fillSelect(id,items,allLabel){let el=$(id),old=el.value;el.innerHTML='<option value="all">'+allLabel+'</option>'+items.map(v=>'<option value="'+esc(v)+'">'+esc(v)+'</option>').join('');if(items.includes(old))el.value=old}
+function renderAll(){
+ makeDetails();let branchNames=[...new Set(branchRows.map(x=>x.branch))].sort();fillSelect('realBranch',branchNames,'Semua cabang');fillSelect('detailBranch',[...new Set(detailRows.map(x=>x.branch))].sort(),'Semua cabang');
+ $('sBranch').textContent=fmt(new Set(branchRows.map(x=>x.branch)).size);$('sDO').textContent=fmt(new Set(detailRows.map(x=>x.doNo)).size);$('sQty').textContent=fmt(detailRows.reduce((s,x)=>s+x.eks,0));$('sKoli').textContent=fmt(detailRows.reduce((s,x)=>s+x.koli,0));let kg=detailRows.reduce((s,x)=>s+x.kg,0);$('sKg').textContent=fmt(kg);$('sTon').textContent=fmtTon(kg/1000);
+ const totalDO=new Set(detailRows.map(x=>String(x.doNo||'').trim().toUpperCase()).filter(Boolean)).size;
+ const totalEks=detailRows.reduce((sum,x)=>sum+(Number(x.eks)||0),0), totalKoli=detailRows.reduce((sum,x)=>sum+(Number(x.koli)||0),0), totalKg=detailRows.reduce((sum,x)=>sum+(Number(x.kg)||0),0);
+ $('totalDOValue').textContent=fmt(totalDO);$('totalEksValue').textContent=fmt(totalEks);$('totalKoliValue').textContent=fmt(totalKoli);$('totalKgValue').textContent=fmt(totalKg);
+ $('branchBody').innerHTML=(branchRows.length?branchRows.map((g,i)=>{let jakarta=/JAKARTA/i.test(g.branch);return '<tr><td>'+(i+1)+'</td><td>'+esc(g.date)+'</td><td>'+esc(g.branch)+'</td><td>'+(jakarta?'':fmt(g.doCount))+'</td><td>'+(jakarta?'':fmt(g.eks))+'</td><td>'+(jakarta?'':fmt(g.koli))+'</td><td>'+(jakarta?'':fmt(g.kg))+'</td><td>'+(jakarta?'':fmtTon(g.ton))+'</td><td title="'+esc(g.unitDetail||'')+'">'+(jakarta?'':esc(g.unitType||''))+'</td><td>'+esc(g.loadingStage||'')+'</td><td>'+(jakarta?'':esc(g.status||'-'))+'</td></tr>'}).join(''):'<tr><td colspan="11" class="empty">Tidak ada data cocok. Periksa pilihan lembar, Warehouse, dan status.</td></tr>')+(branchRows.length?'<tr class="total-row"><td colspan="3"><strong>TOTAL</strong></td><td><strong>'+fmt(totalDO)+'</strong></td><td><strong>'+fmt(totalEks)+'</strong></td><td><strong>'+fmt(totalKoli)+'</strong></td><td><strong>'+fmt(totalKg)+'</strong></td><td><strong>'+fmtTon(totalKg/1000)+'</strong></td><td colspan="3"></td></tr>':'');
+ renderDetail();renderReal();renderReport();
+}
+function currentDetail(){let d=$('detailDate').value,b=$('detailBranch').value,q=$('searchDO').value.trim().toLowerCase();let all=[...detailRows,...manualDOs.map(x=>({...x,status:'DO manual / urgent',manualEntry:true,ton:(Number(x.kg)||0)/1000}))];return all.filter(x=>(!d||x.date===d)&&(b==='all'||canonicalBranch(x.branch)===canonicalBranch(b))&&(!q||String(x.doNo).toLowerCase().includes(q)))}
+function renderDetail(){let arr=currentDetail();$('dDO').textContent=fmt(new Set(arr.map(x=>x.doNo)).size);$('dQty').textContent=fmt(arr.reduce((s,x)=>s+x.eks,0));$('dKoli').textContent=fmt(arr.reduce((s,x)=>s+x.koli,0));let kg=arr.reduce((s,x)=>s+x.kg,0);$('dKg').textContent=fmt(kg);$('dTon').textContent=fmtTon(kg/1000);$('detailBody').innerHTML=arr.length?arr.map((x,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(x.date)+'</td><td>'+esc(x.branch)+'</td><td>'+esc(x.doNo)+'</td><td class="num">'+fmt(x.eks)+'</td><td class="num">'+fmt(x.koli)+'</td><td class="num">'+fmt(x.kg)+'</td><td class="num">'+fmtTon(x.ton)+'</td><td>'+esc(x.status||'DO dari Excel')+'</td></tr>').join(''):'<tr><td colspan="9" class="empty">Tidak ada DO sesuai filter.</td></tr>'}
+function loadRealState(){try{realState=JSON.parse(localStorage.getItem(KEY)||'{}')||{}}catch(e){realState={}}}
+function loadJakartaRealState(){try{jakartaRealState=JSON.parse(localStorage.getItem(JAKARTA_KEY)||'{}')||{}}catch(e){jakartaRealState={}}}
+function loadExtraDOs(){try{manualDOs=JSON.parse(localStorage.getItem(MANUAL_DO_KEY)||'[]')||[]}catch(e){manualDOs=[]}try{nextDOs=JSON.parse(localStorage.getItem(NEXT_DO_KEY)||'[]')||[]}catch(e){nextDOs=[]}}
+function saveExtraDOs(){localStorage.setItem(MANUAL_DO_KEY,JSON.stringify(manualDOs));localStorage.setItem(NEXT_DO_KEY,JSON.stringify(nextDOs))}
+function doIdentity(x){return [String(x.date||''),canonicalBranch(x.branch),String(x.doNo||'').trim().toUpperCase()].join('|')}
+function manualKey(date,branch){return date+'|'+branch}
+function renderReal(){let d=$('realDate').value,b=$('realBranch').value,arr=branchRows.filter(x=>(!d||x.date===d)&&(b==='all'||x.branch===b));$('realBody').innerHTML=arr.length?arr.map((x,i)=>{let manual=!!x.manualJakarta,z=jakartaRealState[manualKey(x.date,x.branch)]||{},rk=manualKey(x.date,x.branch),rz=realState[rk]||{},dispatch=rz.dispatchStatus||'',doValue=rz.doCount??(manual?(z.doCount??''):x.doCount),eksValue=manual?(z.eks??''):x.eks;return '<tr><td>'+(i+1)+'</td><td>'+esc(x.date)+'</td><td>'+esc(x.branch)+'</td><td><input type="number" min="0" step="1" data-realfield="doCount" data-realkey="'+esc(rk)+'" value="'+esc(doValue)+'" style="width:95px" aria-label="Jumlah DO"></td><td>'+(manual?'<input type="number" min="0" step="1" data-jreal="'+esc(rk)+'" data-field="eks" value="'+esc(eksValue)+'" placeholder="EKS" style="width:95px">':fmt(x.eks))+'</td><td>'+(manual?'':fmt(x.koli))+'</td><td>'+(manual?'':fmt(x.kg))+'</td><td>'+(manual?'':fmtTon(x.ton))+'</td><td title="'+esc(x.unitDetail||'')+'"><input type="text" data-unitreal="'+esc(rk)+'" value="'+esc(rz.unitType??x.unitType??'')+'" placeholder="Jenis unit" style="min-width:125px;width:100%"></td><td>'+esc(x.loadingStage||'')+'</td><td><input type="text" data-realfield="suratJalan" data-realkey="'+esc(rk)+'" value="'+esc(rz.suratJalan??'')+'" placeholder="No. surat jalan" style="min-width:135px;width:100%"></td><td><input type="text" data-realfield="eta" data-realkey="'+esc(rk)+'" value="'+esc(rz.eta||estimateTransit(x.branch))+'" placeholder="Otomatis" aria-label="Estimasi waktu tiba" style="min-width:120px;width:100%"></td><td><select data-dispatch="'+esc(rk)+'" style="min-width:190px"><option value="" '+(!dispatch?'selected':'')+'>Pilih konfirmasi...</option><option value="today" '+(dispatch==='today'?'selected':'')+'>Dikirim hari ini</option><option value="next" '+(dispatch==='next'?'selected':'')+'>Next kiriman selanjutnya</option></select></td></tr>'}).join(''):'<tr><td colspan="13" class="empty">Belum ada data untuk tanggal/cabang yang dipilih.</td></tr>'; }
+function saveReal(){document.querySelectorAll('[data-jreal]').forEach(el=>{let k=el.dataset.jreal,f=el.dataset.field;if(!jakartaRealState[k])jakartaRealState[k]={};jakartaRealState[k][f]=el.value===''?'':Math.max(0,Number(el.value)||0)});document.querySelectorAll('[data-unitreal]').forEach(el=>{let k=el.dataset.unitreal;if(!realState[k])realState[k]={};realState[k].unitType=el.value.trim()});document.querySelectorAll('[data-realfield]').forEach(el=>{let k=el.dataset.realkey,f=el.dataset.realfield;if(!realState[k])realState[k]={};realState[k][f]=f==='doCount'?(el.value===''?'':Math.max(0,Number(el.value)||0)):el.value.trim()});try{localStorage.setItem(JAKARTA_KEY,JSON.stringify(jakartaRealState));localStorage.setItem(KEY,JSON.stringify(realState));$('realMsg').textContent='Realisasi, jumlah DO, surat jalan, estimasi tiba, dan jenis unit tersimpan di browser ini.';renderReport();renderReal();alert('Realisasi berhasil disimpan.');}catch(e){$('realMsg').textContent='Gagal menyimpan ke penyimpanan browser. Coba buka file di Chrome/Edge biasa dan pastikan penyimpanan situs tidak diblokir.';alert('Gagal menyimpan. Periksa pengaturan penyimpanan browser.')}}
+function reportRows(){let d=$('reportDate').value;return branchRows.filter(x=>{let z=realState[manualKey(x.date,x.branch)]||{};return (!d||x.date===d)&&z.dispatchStatus==='today'})}
+function renderReport(){let arr=reportRows();$('reportBody').innerHTML=arr.length?arr.map((x,i)=>{let manual=!!x.manualJakarta,z=jakartaRealState[manualKey(x.date,x.branch)]||{},zReal=realState[manualKey(x.date,x.branch)]||{};return '<tr><td>'+(i+1)+'</td><td>'+esc(x.date)+'</td><td>'+esc(x.branch)+'</td><td>'+fmt(zReal.doCount??(manual?z.doCount:x.doCount))+'</td><td>'+ (manual?fmt(z.eks):fmt(x.eks))+'</td><td>'+ (manual?'':fmt(x.koli))+'</td><td>'+ (manual?'':fmt(x.kg))+'</td><td>'+ (manual?'':fmtTon(x.ton))+'</td><td>'+esc(zReal.suratJalan||'-')+'</td><td>'+esc(zReal.eta||estimateTransit(x.branch))+'</td><td>Dikonfirmasi: dikirim hari ini</td></tr>'}).join(''):'<tr><td colspan="11" class="empty">Belum ada kiriman yang dikonfirmasi untuk dikirim hari ini.</td></tr>'}
+function downloadCSV(name,rows){let csv=rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');let blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();URL.revokeObjectURL(url)}
+$('import').addEventListener('click',async()=>{let f=$('file').files[0];if(!f){say('Pilih file Excel terlebih dahulu.','error');return}if(!window.XLSX){say('Pembaca Excel belum termuat. Pastikan internet aktif lalu muat ulang halaman.','error');return}try{workbook=XLSX.read(await f.arrayBuffer(),{type:'array',cellDates:true});$('sheet').innerHTML=workbook.SheetNames.map(s=>'<option value="'+esc(s)+'">'+esc(s)+'</option>').join('');$('sheet').disabled=false;let preferred=workbook.SheetNames.includes('Sheet1')?'Sheet1':workbook.SheetNames[0];$('sheet').value=preferred;loadSheet(preferred)}catch(e){say('Gagal membaca Excel: '+e.message,'error')}});
+function loadSheet(name){let ws=workbook.Sheets[name];raw=XLSX.utils.sheet_to_json(ws,{defval:'',raw:true,cellDates:true});headers=raw.length?Object.keys(raw[0]):[];if(!raw.length){say('Lembar ini kosong. Pilih lembar lain.','error');return}let wh=find(['warehouse','gudang']),st=find(['status']);if(!wh||!find(['business entity','branch','cabang'])||!find(['delivery order','delivery_order','do'])){say('Kolom penting tidak lengkap. Pilih lembar sumber yang berisi Business Entity, Warehouse, Date, Delivery order, Weight, Quantity, Total Koli, dan Status (bila tersedia).','error');return}renderAll();say('Berhasil membaca '+fmt(raw.length)+' baris dari '+name+'. Warehouse default 50; status default Open Order + Closed.','success')}
+$('sheet').addEventListener('change',()=>{if(workbook)loadSheet($('sheet').value)});
+$('clear').addEventListener('click',()=>{if(!confirm('Hapus data impor dari tampilan ini? Realisasi tersimpan di browser tidak dihapus.'))return;raw=[];headers=[];detailRows=[];branchRows=[];renderAll();say('Data impor dibersihkan.')});
+['warehouse','statusFilter','dateFilter'].forEach(id=>$(id).addEventListener('change',renderAll));
+['detailDate','detailBranch','searchDO'].forEach(id=>$(id).addEventListener('input',renderDetail));
+['realDate','realBranch'].forEach(id=>$(id).addEventListener('change',renderReal));
+// Simpan jenis unit otomatis setiap kali diketik/diubah, tidak harus menunggu tombol.
+$('realBody').addEventListener('input',e=>{
+ const el=e.target;
+ if(el.matches('[data-realfield]')){const k=el.dataset.realkey,f=el.dataset.realfield;if(!realState[k])realState[k]={};realState[k][f]=f==='doCount'?(el.value===''?'':Math.max(0,Number(el.value)||0)):el.value;try{localStorage.setItem(KEY,JSON.stringify(realState));}catch(err){} $('realMsg').textContent='Jumlah DO, surat jalan, dan estimasi tiba tersimpan otomatis.';renderReport();return;}
+ if(!el.matches('[data-unitreal]'))return;
+ const k=el.dataset.unitreal;
+ if(!realState[k])realState[k]={};
+ realState[k].unitType=el.value;
+ try{localStorage.setItem(KEY,JSON.stringify(realState));}catch(err){}
+ $('realMsg').textContent='Jenis unit tersimpan otomatis untuk cabang dan tanggal ini.';
+});
+$('realBody').addEventListener('change',e=>{
+ const el=e.target;
+ if(el.matches('[data-realfield]')){const k=el.dataset.realkey,f=el.dataset.realfield;if(!realState[k])realState[k]={};realState[k][f]=f==='doCount'?(el.value===''?'':Math.max(0,Number(el.value)||0)):el.value;try{localStorage.setItem(KEY,JSON.stringify(realState));$('realMsg').textContent='Perubahan tersimpan otomatis.';renderReport();}catch(err){$('realMsg').textContent='Gagal menyimpan perubahan.';}return;}
+ if(el.matches('[data-dispatch]')){
+  const k=el.dataset.dispatch,chosen=el.value;
+  if(!realState[k])realState[k]={};
+  if(!chosen){delete realState[k].dispatchStatus;}
+  else {realState[k].dispatchStatus=chosen; if(chosen==='next'){const parts=k.split('|'),dt=parts[0],br=canonicalBranch(parts.slice(1).join('|'));detailRows.filter(x=>x.date===dt&&canonicalBranch(x.branch)===br&&!manualDOs.some(m=>doIdentity(m)===doIdentity(x))).forEach(x=>{if(!nextDOs.some(n=>doIdentity(n)===doIdentity(x)))nextDOs.push({...x});});try{saveExtraDOs()}catch(err){}}}
+  try {
+    localStorage.setItem(KEY,JSON.stringify(realState));
+    $('realMsg').textContent=!chosen?'Konfirmasi dihapus.':chosen==='today'?'Tersimpan: Dikirim hari ini — cabang ini tampil di Laporan Kiriman.':'Tersimpan: Next kiriman selanjutnya — cabang ini disembunyikan dari Laporan Kiriman.';
+    renderReport();
+  } catch(err) {
+    $('realMsg').textContent='Gagal menyimpan konfirmasi. Browser mungkin memblokir penyimpanan lokal.';
+  }
+  return;
+ }
+ if(!el.matches('[data-unitreal]'))return;
+ const k=el.dataset.unitreal;if(!realState[k])realState[k]={};realState[k].unitType=el.value.trim();try{localStorage.setItem(KEY,JSON.stringify(realState));}catch(err){}
+},true);
+$('addManualDO').addEventListener('click',()=>{let date=$('manualDate').value||$('detailDate').value,branch=canonicalBranch($('manualBranch').value),doNo=$('manualDo').value.trim(),eks=Math.max(0,Number($('manualEks').value)||0),koli=Math.max(0,Number($('manualKoli').value)||0),weight=Math.max(0,Number($('manualWeight').value)||0);if(!date||!branch||!doNo){alert('Isi tanggal, cabang, dan nomor DO terlebih dahulu.');return}let item={date,branch,doNo,eks,koli,kg:Math.round(weight/1000+koli),ton:(weight/1000+koli)/1000,status:'DO manual / urgent',manualEntry:true};if(manualDOs.some(x=>doIdentity(x)===doIdentity(item))){alert('DO ini sudah ada di Detail DO. Nomor DO yang sama tidak ditambahkan lagi.');return}manualDOs.push(item);try{saveExtraDOs()}catch(e){}$('detailDate').value=date;$('detailBranch').value='all';$('searchDO').value='';$('manualDo').value='';renderDetail();say('DO manual berhasil ditambahkan. Jika DO yang sama muncul di impor Excel berikutnya, data Excel tersebut akan diabaikan.','success')});
+$('reportDate').addEventListener('change',renderReport);$('saveReal').addEventListener('click',saveReal);
+$('exportDO').addEventListener('click',()=>{let arr=currentDetail();downloadCSV('detail_DO_per_cabang.csv',[['Tanggal','Cabang','Delivery Order','EKS','Koli','KG','Tonase (ton)','Status'],...arr.map(x=>[x.date,x.branch,x.doNo,x.eks,x.koli,x.kg,x.ton,''])])});
+$('exportReport').addEventListener('click',()=>{let arr=reportRows();downloadCSV('laporan_kiriman.csv',[['No','Tanggal','Cabang','Jumlah DO','EKS','Koli','KG','Tonase (ton)','No Surat Jalan','ETA','Status Kiriman'],...arr.map((x,i)=>{let manual=!!x.manualJakarta,z=jakartaRealState[manualKey(x.date,x.branch)]||{};let rz=realState[manualKey(x.date,x.branch)]||{};return[i+1,x.date,x.branch,rz.doCount??(manual?(z.doCount??''):x.doCount),manual?(z.eks??''):x.eks,manual?'':x.koli,manual?'':x.kg,manual?'':x.ton,rz.suratJalan||'',rz.eta||estimateTransit(x.branch),'Dikonfirmasi: dikirim hari ini']})])});
+function loadHtml2Canvas(){
+ return new Promise((resolve,reject)=>{
+  if(window.html2canvas){resolve(window.html2canvas);return;}
+  const script=document.createElement('script');
+  script.src='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+  script.onload=()=>window.html2canvas?resolve(window.html2canvas):reject(new Error('html2canvas tidak tersedia'));
+  script.onerror=()=>reject(new Error('Gagal memuat alat gambar. Periksa koneksi internet.'));
+  document.head.appendChild(script);
+ });
+}
+document.querySelectorAll('.pdf-export').forEach(btn=>btn.addEventListener('click',async()=>{
+ const body=document.getElementById(btn.dataset.pdf), table=body?.closest('table');
+ if(!table){alert('Tabel belum tersedia untuk disimpan sebagai gambar.');return;}
+ const originalText=btn.textContent;btn.disabled=true;btn.textContent='Menyiapkan gambar...';
+ try{
+  const html2canvas=await loadHtml2Canvas();
+  const title=btn.dataset.title||'Laporan';
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const clone=table.cloneNode(true);
+  // Total Rencana ditampilkan sebagai kartu berlabel yang jelas di bawah tabel gambar.
+  if(title==='Rencana Kirim') clone.querySelectorAll('.total-row').forEach(tr=>tr.remove());
+  // Hilangkan kolom Tanggal dan Tonase dari gambar ekspor, tanpa mengubah tabel aplikasi.
+  const headers=Array.from(clone.querySelectorAll('thead th'));
+  const removeIndexes=[];
+  headers.forEach((th,i)=>{const t=th.textContent.trim().toLowerCase();if(t==='tanggal'||t.includes('tonase'))removeIndexes.push(i);});
+  // Status tidak ditampilkan pada gambar Rencana Kirim.
+  if(title==='Rencana Kirim')headers.forEach((th,i)=>{if(th.textContent.trim().toLowerCase()==='status sumber')removeIndexes.push(i);});
+  const indexes=[...new Set(removeIndexes)].sort((a,b)=>b-a);
+  clone.querySelectorAll('tr').forEach(tr=>{
+   if(tr.classList.contains('total-row')){
+    // Pada baris total, kolom tanggal tidak ada karena sudah digabung; hilangkan nilai tonase dan rapikan colspan.
+    const cells=Array.from(tr.cells);
+    if(cells.length>7)cells[7].remove();
+    const last=tr.cells[tr.cells.length-1];if(last&&last.hasAttribute('colspan')){const n=Number(last.getAttribute('colspan'))||1;last.setAttribute('colspan',String(Math.max(1,n-1)));}
+   }else indexes.forEach(i=>{if(tr.cells.length>i)tr.deleteCell(i);});
+  });
+  clone.querySelectorAll('input,select,textarea').forEach(el=>{const td=el.closest('td');if(td){const value=el.tagName==='SELECT'?(el.options[el.selectedIndex]?.text||''):el.value;td.textContent=value||'-';}});
+  const holder=document.createElement('div');
+  holder.style.cssText='position:fixed;left:-100000px;top:0;width:1600px;background:#ffffff;padding:36px;font-family:Arial,Helvetica,sans-serif;color:#172033;z-index:-1;';
+  holder.innerHTML=`<div style="border-bottom:4px solid #1d3557;padding-bottom:16px;margin-bottom:22px"><div style="font-size:13px;letter-spacing:2px;color:#64748b;font-weight:700;text-transform:uppercase">Gudang Pusat · Dokumen Operasional</div><h1 style="font-size:32px;margin:10px 0;color:#142b4a">${esc(title)}</h1><div style="font-size:15px;color:#64748b">Dibuat: ${esc(new Date().toLocaleString('id-ID'))}</div></div><div style="width:100%"></div>`;
+  const tableWrap=document.createElement('div');tableWrap.style.cssText='width:100%;';
+  clone.style.cssText='width:100%;border-collapse:collapse;table-layout:auto;font-size:16px;background:#fff;';
+  clone.querySelectorAll('th').forEach(th=>th.style.cssText='background:#1d3557;color:#fff;text-align:left;padding:12px 10px;border:1px solid #cbd5e1;font-size:14px;');
+  clone.querySelectorAll('td').forEach(td=>td.style.cssText='padding:10px;border:1px solid #dce3ec;vertical-align:top;overflow-wrap:anywhere;');
+  clone.querySelectorAll('tbody tr:nth-child(even)').forEach(tr=>tr.style.background='#f3f6fa');
+  clone.querySelectorAll('.total-row').forEach(tr=>{tr.style.background='#e8eef6';tr.style.fontWeight='700';});
+  tableWrap.appendChild(clone);holder.appendChild(tableWrap);
+  if(title==='Rencana Kirim'){
+   const vals={do:$('totalDOValue').textContent,eks:$('totalEksValue').textContent,koli:$('totalKoliValue').textContent,kg:$('totalKgValue').textContent};
+   const summary=document.createElement('div');summary.style.cssText='display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:22px;';
+   [['TOTAL JUMLAH DO',vals.do],['TOTAL EKS',vals.eks],['TOTAL KOLI',vals.koli],['TOTAL KG',vals.kg]].forEach(([label,value])=>{const card=document.createElement('div');card.style.cssText='border:1px solid #cbd5e1;border-left:6px solid #2457c5;border-radius:8px;background:#f8fafc;padding:16px;';card.innerHTML='<div style="font-size:14px;color:#475569;font-weight:700;letter-spacing:.5px">'+label+'</div><div style="font-size:26px;color:#142b4a;font-weight:700;margin-top:8px">'+esc(value)+'</div>';summary.appendChild(card)});
+   holder.appendChild(summary);
+  }
+  document.body.appendChild(holder);
+  try{
+   const canvas=await html2canvas(holder,{backgroundColor:'#ffffff',scale:2,useCORS:true,logging:false});
+   const link=document.createElement('a');link.download=(title.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')||'laporan')+'.png';link.href=canvas.toDataURL('image/png');link.click();
+  }finally{holder.remove();}
+ }catch(e){console.error(e);alert('Gambar belum bisa diunduh. Pastikan internet aktif lalu coba lagi.');}
+ finally{btn.disabled=false;btn.textContent=originalText;}
+}));
+document.querySelectorAll('[data-page]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-page]').forEach(x=>x.classList.toggle('active',x===b));document.querySelectorAll('.page').forEach(x=>x.hidden=x.id!==b.dataset.page);if(b.dataset.page==='realisasi')renderReal();if(b.dataset.page==='laporan')renderReport();if(b.dataset.page==='detail')renderDetail()}));
+loadRealState();loadJakartaRealState();loadExtraDOs();
+})();
+</script></body></html>
