@@ -4,6 +4,51 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#f4f6f8;color:#1f2937;font:14px Arial,sans-serif}header{background:#193650;color:#fff;padding:18px 22px}header h1{margin:0;font-size:22px}header p{margin:6px 0 0;color:#dce7f1}main{max-width:1250px;margin:20px auto;padding:0 14px}.nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}.nav button{padding:11px 14px;border:1px solid #d5dde7;border-radius:7px;background:#fff;color:#193650;font-weight:bold;cursor:pointer}.nav button.active{background:#2457c5;color:#fff;border-color:#2457c5}.panel{background:#fff;border:1px solid #dce2e9;border-radius:9px;padding:16px;margin-bottom:14px}.panel h2{font-size:18px;margin:0 0 12px}.row{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:12px}input,select{font:inherit;padding:8px;border:1px solid #cbd5e1;border-radius:6px;max-width:100%}button.action{background:#2457c5;color:#fff;border:0;border-radius:6px;padding:10px 13px;font:inherit;cursor:pointer}.hint{color:#64748b;margin:0 0 12px}.msg{padding:10px;border-radius:6px;background:#eff6ff;color:#1d4ed8;margin:10px 0}.msg.error{background:#fef2f2;color:#b91c1c}.msg.success{background:#f0fdf4;color:#166534}.stats{display:flex;gap:9px;flex-wrap:wrap;margin:12px 0}.stat{border:1px solid #dce2e9;border-radius:7px;padding:10px 12px;min-width:110px;flex:1}.stat span{display:block;color:#64748b;font-size:12px}.stat b{font-size:19px;display:block;margin-top:5px}.tablewrap{overflow:auto;border:1px solid #dce2e9;border-radius:7px}.total-row{background:#e8eef6;font-weight:700}.total-summary{display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:10px;margin-top:12px}.total-card{border:1px solid #cbd5e1;border-left:5px solid #2457c5;border-radius:7px;background:#f8fafc;padding:12px 14px}.total-card span{display:block;color:#475569;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}.total-card strong{display:block;font-size:22px;color:#142b4a;margin-top:5px}@media(max-width:650px){.total-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}table{border-collapse:collapse;width:100%;min-width:850px}th,td{padding:9px 10px;border-bottom:1px solid #e5eaf0;text-align:left;white-space:nowrap}th{background:#f0f4f8;font-size:12px;color:#334155;position:sticky;top:0}td.num,th.num{text-align:right}.empty{text-align:center;color:#64748b;padding:24px}section.page[hidden]{display:none!important}.foot{font-size:12px;color:#64748b;margin:12px 0}.small{font-size:12px;color:#64748b}@media(max-width:600px){header h1{font-size:19px}.panel{padding:12px}.nav button{flex:1}}
+
+/* Tampilan ringkas: utamakan semua kolom terlihat tanpa geser horizontal */
+html{scroll-behavior:smooth}
+body{overflow-x:hidden}
+main{max-width:1680px;width:100%;margin:18px auto;padding:0 16px}
+#authBar{max-width:1680px!important;margin-left:auto!important;margin-right:auto!important}
+.panel{min-width:0}
+.row>*{min-width:0}
+.tablewrap{width:100%;max-width:100%;overflow-x:hidden;overflow-y:auto}
+table{width:100%;min-width:0;table-layout:fixed;border-collapse:collapse}
+th,td{padding:8px 6px;white-space:normal;overflow-wrap:anywhere;word-break:normal;line-height:1.35;font-size:12px;vertical-align:top}
+th{font-size:11px;line-height:1.25}
+td input,td select,td textarea{width:100%;min-width:0;max-width:100%;padding:6px 4px;font-size:12px}
+td button{max-width:100%;white-space:normal}
+.nav{position:sticky;top:0;z-index:20;background:#f4f6f8;padding:6px 0}
+.nav button{flex:1;min-width:130px}
+.pdf-toolbar{justify-content:space-between}
+.pdf-toolbar h3{margin:0 auto 0 0}
+input,select{min-width:0}
+.total-summary{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media(max-width:1000px){
+ main{padding:0 10px}
+ th,td{padding:7px 4px;font-size:11px}
+ th{font-size:10px}
+ .panel{padding:12px}
+ .nav button{min-width:calc(50% - 8px)}
+}
+@media(max-width:600px){
+ header{padding:15px}
+ header h1{font-size:19px}
+ main{padding:0 8px}
+ #authBar{margin:8px!important;padding:10px!important}
+ .panel{padding:10px}
+ .row{gap:7px}
+ .row>label{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+ .row>label input,.row>label select{width:100%}
+ .nav{position:static}
+ .nav button{min-width:0;flex:1 1 calc(50% - 8px);padding:10px 6px;font-size:12px}
+ .stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+ .stat{min-width:0}
+ .total-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .tablewrap{overflow-x:auto}
+ table{min-width:680px;table-layout:auto}
+ th,td{white-space:nowrap;padding:8px;font-size:12px}
+}
 </style></head><body>
 <header><h1>Rencana Kirim Gudang Pusat</h1><p>Rencana per cabang, realisasi pengiriman, laporan, dan detail per DO</p></header>
 <div id="authBar" style="max-width:1250px;margin:12px auto 0;padding:12px 14px;background:#fff;border:1px solid #dce2e9;border-radius:9px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
