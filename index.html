@@ -51,7 +51,7 @@ function setCloudMsg(t){const e=$('cloudStatus');if(e)e.textContent=t}
 function updateAccessUI(){const admin=isAdmin();$('accessStatus').textContent=admin?'Akses: ADMIN':'Akses: LIHAT SAJA';$('userEmail').textContent=fbUser?(fbUser.email||''):'Pengunjung';$('loginBtn').hidden=admin;$('logoutBtn').hidden=!fbUser;$('adminEmail').hidden=admin;$('adminPassword').hidden=admin;document.querySelectorAll('#import,#clear,#saveReal,#exportReport,#exportDO,.pdf-export,#addManualDO,[data-excel-export]').forEach(e=>{if(e)e.disabled=!admin;e?.setAttribute('title',admin?'':'Khusus admin')});document.querySelectorAll('[data-realfield],[data-unitreal],[data-dispatch],[data-jreal]').forEach(e=>{e.disabled=!admin});document.querySelectorAll('[data-admin-only]').forEach(e=>e.hidden=!admin)}
 async function cloudSaveState(){if(!fbDb||!isAdmin()||!cloudReady||cloudLoading)return;try{const payload={raw,headers,realState,jakartaRealState,manualDOs,nextDOs,carryovers:JSON.parse(localStorage.getItem(CARRYOVER_KEY)||'[]'),updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:fbUser.email};await fbDb.collection('sharedApp').doc('state').set(payload);setCloudMsg('Data berhasil disinkronkan ke Firebase.')}catch(e){console.error(e);setCloudMsg('Gagal sinkron: '+(e.code||e.message||'periksa aturan Firestore'))}}
 function queueCloudSave(){if(!isAdmin()||!cloudReady||cloudLoading)return;clearTimeout(saveTimer);saveTimer=setTimeout(()=>cloudSaveState(),500)}
-async function cloudLoadState(){if(!fbDb)return;cloudLoading=true;try{const snap=await fbDb.collection('sharedApp').doc('state').get();if(snap.exists){const d=snap.data()||{};raw=Array.isArray(d.raw)?d.raw:[];headers=Array.isArray(d.headers)?d.headers:[];realState=d.realState||{};jakartaRealState=d.jakartaRealState||{};manualDOs=Array.isArray(d.manualDOs)?d.manualDOs:[];nextDOs=Array.isArray(d.nextDOs)?d.nextDOs:[];if(Array.isArray(d.carryovers))localStorage.setItem(CARRYOVER_KEY,JSON.stringify(d.carryovers));localStorage.setItem(KEY,JSON.stringify(realState));localStorage.setItem(JAKARTA_KEY,JSON.stringify(jakartaRealState));localStorage.setItem(MANUAL_DO_KEY,JSON.stringify(manualDOs));localStorage.setItem(NEXT_DO_KEY,JSON.stringify(nextDOs));if(raw.length){renderAll();say('Data bersama berhasil dimuat dari Firebase.','success')}else{renderAll()};setCloudMsg('Data bersama berhasil dimuat.')}else{loadRealState();loadJakartaRealState();loadExtraDOs();renderAll();setCloudMsg(isAdmin()?'Database masih kosong. Impor Excel untuk mulai menyimpan data bersama.':'Belum ada data online. Admin perlu mengimpor Excel.')}}catch(e){console.error(e);setCloudMsg('Gagal membaca data. Periksa Firestore Rules dan koneksi.')}finally{cloudLoading=false;cloudReady=true;updateAccessUI()}}
+async function cloudLoadState(){if(!fbDb)return;cloudLoading=true;try{const snap=await fbDb.collection('sharedApp').doc('state').get();if(snap.exists){const d=snap.data()||{};raw=Array.isArray(d.raw)?d.raw:[];headers=Array.isArray(d.headers)?d.headers:[];realState=d.realState||{};jakartaRealState=d.jakartaRealState||{};manualDOs=Array.isArray(d.manualDOs)?d.manualDOs:[];nextDOs=Array.isArray(d.nextDOs)?d.nextDOs:[];if(Array.isArray(d.carryovers))localStorage.setItem(CARRYOVER_KEY,JSON.stringify(d.carryovers));localStorage.setItem(KEY,JSON.stringify(realState));localStorage.setItem(JAKARTA_KEY,JSON.stringify(jakartaRealState));localStorage.setItem(MANUAL_DO_KEY,JSON.stringify(manualDOs));localStorage.setItem(NEXT_DO_KEY,JSON.stringify(nextDOs));if(raw.length){renderAll();say('Data bersama berhasil dimuat dari Firebase.','success')}else{renderAll()};setCloudMsg('Data bersama berhasil dimuat.')}else{loadRealState();loadJakartaRealState();loadExtraDOs();renderAll();setCloudMsg(isAdmin()?'Database masih kosong. Impor Excel untuk mulai menyimpan data bersama.':'Belum ada data online. Admin perlu mengimpor Excel.')}}catch(e){console.error(e);setCloudMsg('Gagal membaca data. Periksa Firestore Rules dan koneksi.')}finally{cloudLoading=false;cloudReady=true;updateAccessUI();if(isAdmin()&&migrateSavedRealizations())queueCloudSave()}}
 async function initFirebase(){try{if(!window.firebase){setCloudMsg('Firebase SDK gagal dimuat. Periksa internet.');return}if(!firebase.apps.length)firebase.initializeApp(firebaseConfig);fbAuth=firebase.auth();fbDb=firebase.firestore();$('loginBtn').addEventListener('click',async()=>{const email=$('adminEmail').value.trim(),password=$('adminPassword').value;if(!email||!password){alert('Isi email dan password admin.');return}try{await fbAuth.signInWithEmailAndPassword(email,password);$('adminPassword').value=''}catch(e){alert('Login gagal: '+(e.code||e.message))}});$('logoutBtn').addEventListener('click',()=>fbAuth.signOut());fbAuth.onAuthStateChanged(async user=>{fbUser=user;updateAccessUI();await cloudLoadState();if(isAdmin())setCloudMsg('Login admin aktif. Perubahan akan disimpan online.');else setCloudMsg('Mode lihat saja. Data dibaca dari Firebase.')});}catch(e){console.error(e);setCloudMsg('Gagal inisialisasi Firebase: '+(e.message||e))}}
 
 const norm=v=>String(v??'').trim().toLowerCase().replace(/[_\s]+/g,' ');
@@ -217,7 +217,7 @@ function reconcileNextShipment(k,actual){
   const originals=sourceDetailRows.filter(x=>x.date===date&&canonicalBranch(x.branch)===branch&&!x.manualJakarta);
   if(!originals.length)return;
   const ordered=[...originals].sort((a,b)=>String(a.doNo).localeCompare(String(b.doNo),undefined,{numeric:true,sensitivity:'base'}));
-  const old=realState[k]||{},signature=[actual.doCount,actual.eks,actual.koli,actual.kg].join('|');
+  const old=realState[k]||{},signature='rule-v2|'+[actual.doCount,actual.eks,actual.koli,actual.kg].join('|');
   if(old.reconciledSignature===signature)return;
   const plannedTotals={
    doCount:ordered.length,
@@ -265,6 +265,23 @@ function reconcileNextShipment(k,actual){
   realState[k].matchFound=!!match;
   realState[k].reconciledSignature=signature;
   try{saveExtraDOs()}catch(e){}
+}
+function migrateSavedRealizations(){
+ if(!isAdmin()||!sourceDetailRows.length)return false;
+ let changed=false;
+ Object.keys(realState||{}).forEach(k=>{
+  const z=realState[k]||{};
+  if(['doCount','eks','koli','kg'].every(f=>z[f]!==undefined&&z[f]!=='')){
+   const before=z.reconciledSignature;
+   reconcileNextShipment(k,z);
+   if((realState[k]||{}).reconciledSignature!==before)changed=true;
+  }
+ });
+ if(changed){
+  try{localStorage.setItem(KEY,JSON.stringify(realState));saveExtraDOs();}catch(e){}
+  renderAll();
+ }
+ return changed;
 }
 function saveReal(){document.querySelectorAll('[data-jreal]').forEach(el=>{let k=el.dataset.jreal,f=el.dataset.field;if(!jakartaRealState[k])jakartaRealState[k]={};jakartaRealState[k][f]=el.value===''?'':Math.max(0,Number(el.value)||0)});document.querySelectorAll('[data-unitreal]').forEach(el=>{let k=el.dataset.unitreal;if(!realState[k])realState[k]={};realState[k].unitType=el.value.trim()});document.querySelectorAll('[data-realfield]').forEach(el=>{let k=el.dataset.realkey,f=el.dataset.realfield;if(!realState[k])realState[k]={};realState[k][f]=['doCount','eks','koli','kg'].includes(f)?(el.value===''?'':Math.max(0,Number(el.value)||0)):el.value.trim()});try{document.querySelectorAll('#realBody tr').forEach(tr=>{const first=tr.querySelector('[data-realfield="doCount"]');if(!first)return;const k=first.dataset.realkey,z=realState[k]||{};if(['doCount','eks','koli','kg'].every(f=>z[f]!==undefined&&z[f]!==''))reconcileNextShipment(k,z)});localStorage.setItem(JAKARTA_KEY,JSON.stringify(jakartaRealState));localStorage.setItem(KEY,JSON.stringify(realState));$('realMsg').textContent='Realisasi tersimpan. Sisa tiap DO otomatis masuk ke Rencana Kirim berikutnya.';queueCloudSave();renderAll();alert('Realisasi berhasil disimpan dan sisa DO dihitung untuk kiriman selanjutnya.');}catch(e){$('realMsg').textContent='Gagal menyimpan ke penyimpanan browser. Coba buka file di Chrome/Edge biasa dan pastikan penyimpanan situs tidak diblokir.';alert('Gagal menyimpan. Periksa pengaturan penyimpanan browser.')}}
 function reportRows(){let d=$('reportDate').value;return branchRows.filter(x=>{let z=realState[manualKey(x.date,x.branch)]||{};return (!d||x.date===d)&&z.dispatchStatus==='today'})}
