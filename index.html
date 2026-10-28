@@ -154,7 +154,12 @@ function makeDetails(){
  detailRows=[...combined.values()].sort((a,b)=>a.date.localeCompare(b.date)||compareBranches(a.branch,b.branch)||a.doNo.localeCompare(b.doNo));
  try{saveExtraDOs()}catch(e){}
  let bg=new Map();
+ // Rencana Kirim hanya merekap DO yang belum ditandai terkirim pada rekonsiliasi realisasi.
+ // Detail DO tetap menampilkan seluruh DO dengan warna hijau/oranye sebagai jejak audit.
  detailRows.forEach(d=>{
+  const rk=manualKey(d.date,d.branch),rz=realState[rk]||{};
+  const shipped=Array.isArray(rz.shippedDONumbers)&&rz.shippedDONumbers.map(String).includes(String(d.doNo));
+  if(rz.reconciledSignature&&shipped)return;
   let key=d.date+'|'+d.branch;
   if(!bg.has(key))bg.set(key,{date:d.date,branch:d.branch,dos:new Set(),eks:0,koli:0,kg:0,statuses:new Set()});
   let g=bg.get(key);g.dos.add(d.doNo);g.eks+=d.eks;g.koli+=d.koli;g.kg+=d.kg;
