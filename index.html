@@ -223,10 +223,10 @@ function makeDetails(){
  // Tambahkan rekap sisa kiriman ke rencana cabang yang sama, bukan sebagai baris terpisah.
  carryovers.forEach(c=>{
   if(c.autoBranchSummary)return;
-  const matches=baseRows.filter(x=>canonicalBranch(x.branch)===canonicalBranch(c.branch));
+  const matches=baseRows.filter(x=>canonicalBranch(x.branch)===canonicalBranch(c.branch)&&String(x.date||'')===String(c.date||''));
   if(matches.length){
-   // Gabungkan sisa ke baris tanggal impor paling baru untuk cabang tersebut.
-   const target=matches.reduce((a,b)=>String(a.date||'')>=String(b.date||'')?a:b);
+   // Gabungkan hanya dengan rencana pada tanggal yang sama; sisa kiriman tanggal berikutnya harus menjadi baris tersendiri.
+   const target=matches[0];
    target.doCount=(Number(target.doCount)||0)+(Number(c.doCount)||0);
    target.eks=(Number(target.eks)||0)+(Number(c.eks)||0);
    target.koli=(Number(target.koli)||0)+(Number(c.koli)||0);
