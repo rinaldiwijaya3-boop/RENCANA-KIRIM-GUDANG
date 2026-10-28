@@ -211,16 +211,10 @@ function makeDetails(){
  // Antrean tetap yang tidak terkirim pada 27 Oktober 2026. Simpan sekali di browser agar tetap tampil meski belum impor Excel.
  let carryovers=[];
  try{carryovers=JSON.parse(localStorage.getItem(CARRYOVER_KEY)||'null');}catch(e){carryovers=null;}
- if(!Array.isArray(carryovers)){carryovers=[
-  {date:'2026-10-27',branch:'SEMARANG',doCount:31,eks:2172,koli:21,kg:724,status:'Next kiriman selanjutnya — sisa 27 Okt',carryover:true},
-  {date:'2026-10-27',branch:'ACEH',doCount:11,eks:379,koli:5,kg:144,status:'Next kiriman selanjutnya — sisa 27 Okt',carryover:true},
-  {date:'2026-10-27',branch:'MANADO',doCount:20,eks:4598,koli:41,kg:1325,status:'Next kiriman selanjutnya — sisa 27 Okt',carryover:true},
-  {date:'2026-10-27',branch:'SAMARINDA',doCount:8,eks:178,koli:16,kg:492,status:'Next kiriman selanjutnya — sisa 27 Okt',carryover:true}
- ];try{localStorage.setItem(CARRYOVER_KEY,JSON.stringify(carryovers));}catch(e){}}
- // Hilangkan acuan awal lama untuk cabang yang sudah masuk Laporan Kirim.
- // Sisa yang belum terpenuhi tetap dikelola oleh autoBranchSummary dari rekonsiliasi realisasi.
- const reportedBranches=new Set(Object.entries(realState||{}).filter(([k,z])=>z&&z.dispatchStatus==='today').map(([k,z])=>canonicalBranch(k.split('|').slice(1).join('|'))));
- const filteredCarryovers=carryovers.filter(c=>!(c.carryover&&!c.autoBranchSummary&&reportedBranches.has(canonicalBranch(c.branch))));
+ if(!Array.isArray(carryovers)){carryovers=[];try{localStorage.setItem(CARRYOVER_KEY,'[]')}catch(e){}}
+ // Hapus hanya empat acuan awal warisan tanggal 27 Oktober 2026. Data berikutnya tidak diperlakukan khusus.
+ const legacyInitialBranches=new Set(['SEMARANG','ACEH','MANADO','SAMARINDA']);
+ const filteredCarryovers=carryovers.filter(c=>!(c.carryover&&!c.autoBranchSummary&&c.date==='2026-10-27'&&legacyInitialBranches.has(canonicalBranch(c.branch))));
  if(filteredCarryovers.length!==carryovers.length){
   carryovers=filteredCarryovers;
   try{localStorage.setItem(CARRYOVER_KEY,JSON.stringify(carryovers))}catch(e){}
