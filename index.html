@@ -206,7 +206,15 @@ function makeDetails(){
   const direct=manualKey(date,branch);
   if(realState[direct])return realState[direct];
   const found=Object.keys(realState||{}).find(k=>{const p=k.split('|');return p[0]===date&&canonicalBranch(p.slice(1).join('|'))===canonicalBranch(branch)});
-  return found?realState[found]||{}:{};
+  if(found)return realState[found]||{};
+  // Realisasi kadang disimpan di tanggal keberangkatan sebelumnya; untuk Bali/Banjarmasin,
+  // gunakan rekonsiliasi terbaru cabang itu agar DO asal yang sudah terkirim tidak muncul lagi.
+  const target=canonicalBranch(branch);
+  if(['BALI','BANJARMASIN'].includes(target)){
+   const candidates=Object.keys(realState||{}).filter(k=>{const p=k.split('|');return canonicalBranch(p.slice(1).join('|'))===target&&(realState[k]||{}).reconciledSignature;}).sort((a,b)=>b.split('|')[0].localeCompare(a.split('|')[0]));
+   if(candidates.length)return realState[candidates[0]]||{};
+  }
+  return {};
  };
  const nextDay=date=>{
   const m=String(date||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -218,8 +226,16 @@ function makeDetails(){
  // sisa dipindah ke tanggal rencana berikutnya (29), bukan ditumpuk ke tanggal lama.
  detailRows.forEach(d=>{
   const rz=realEntryFor(d.date,d.branch);
+  const branch=canonicalBranch(d.branch);
   const shipped=Array.isArray(rz.shippedDONumbers)&&rz.shippedDONumbers.map(String).includes(String(d.doNo));
+  // Kalau cabang sudah direkonsiliasi, yang ditampilkan hanya DO sisa.
   if(rz.reconciledSignature&&shipped)return;
+  // DO asal Bali/Banjarmasin yang tidak masuk daftar sisa tidak boleh otomatis ikut lagi
+  // dari data Excel; ambil hanya DO yang benar-benar tercatat sebagai antrean nextDOs.
+  if(rz.reconciledSignature&&['BALI','BANJARMASIN'].includes(branch)){
+   const pendingIds=new Set(nextDOs.filter(n=>canonicalBranch(n.branch)===branch&&String(n.date)===String(d.date)).map(n=>String(n.doNo)));
+   if(!pendingIds.has(String(d.doNo))&&!shipped)return;
+  }
   const planDate=rz.reconciledSignature?nextDay(d.date):d.date;
   const key=planDate+'|'+d.branch;
   if(!pendingMap.has(key))pendingMap.set(key,{date:planDate,branch:d.branch,dos:new Set(),eks:0,koli:0,kg:0,statuses:new Set()});
