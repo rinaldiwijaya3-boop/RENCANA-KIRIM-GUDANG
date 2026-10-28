@@ -40,7 +40,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
 (function(){
-const $=id=>document.getElementById(id);let workbook=null,raw=[],headers=[],detailRows=[],sourceDetailRows=[],branchRows=[],realState={},jakartaRealState={},manualDOs=[],nextDOs=[];
+const $=id=>document.getElementById(id);let workbook=null,raw=[],headers=[],detailRows=[],sourceDetailRows=[],branchRows=[],planRows=[],realState={},jakartaRealState={},manualDOs=[],nextDOs=[];
 
 const KEY='rkgp_v2_realisasi';const JAKARTA_KEY='rkgp_jakarta_manual_real';const MANUAL_DO_KEY='rkgp_manual_detail_do_v1';const NEXT_DO_KEY='rkgp_next_shipment_do_v1';const CARRYOVER_KEY='rkgp_next_shipment_summary_v1';
 const ADMIN_EMAIL='rinaldiwijaya3@gmail.com';
@@ -195,15 +195,44 @@ function makeDetails(){
  baseRows.forEach(g=>{if(/JAKARTA/i.test(g.branch)){['JAKARTA DIRECT','JAKARTA RETAIL'].forEach(n=>branchRows.push({...g,branch:n,doCount:0,eks:0,koli:0,kg:0,ton:0,status:'',manualJakarta:true}));}else branchRows.push(g)});
  branchRows=branchRows.map(g=>{let up=unitPlan(g.branch,g.kg);return {...g,unitType:up.label,unitDetail:up.detail,loadingStage:loadingStage(g.branch)}});
  branchRows.sort((a,b)=>a.date.localeCompare(b.date)||compareBranches(a.branch,b.branch));
+
+ // Data rencana kirim dibuat terpisah: cabang penuh tetap tersedia untuk Realisasi/Laporan,
+ // sedangkan Rencana Kirim hanya menampilkan DO yang belum tercatat terkirim.
+ let pendingMap=new Map();
+ detailRows.forEach(d=>{
+  const rk=manualKey(d.date,d.branch),rz=realState[rk]||{};
+  const shipped=Array.isArray(rz.shippedDONumbers)&&rz.shippedDONumbers.map(String).includes(String(d.doNo));
+  if(rz.reconciledSignature&&shipped)return;
+  const key=d.date+'|'+d.branch;
+  if(!pendingMap.has(key))pendingMap.set(key,{date:d.date,branch:d.branch,dos:new Set(),eks:0,koli:0,kg:0,statuses:new Set()});
+  const g=pendingMap.get(key);g.dos.add(String(d.doNo));g.eks+=Number(d.eks)||0;g.koli+=Number(d.koli)||0;g.kg+=Number(d.kg)||0;
+  String(d.status||'').split(', ').filter(Boolean).forEach(st=>g.statuses.add(st));
+ });
+ planRows=[...pendingMap.values()].map(g=>({...g,doCount:g.dos.size,ton:g.kg/1000,status:[...g.statuses].join(', ')}));
+ // Bawa sisa tetap yang belum memiliki detail DO individual ke rencana saja.
+ carryovers.forEach(c=>{
+  const matches=planRows.filter(x=>canonicalBranch(x.branch)===canonicalBranch(c.branch));
+  if(matches.length){
+   const target=matches.reduce((a,b)=>String(a.date||'')>=String(b.date||'')?a:b);
+   target.doCount=(Number(target.doCount)||0)+(Number(c.doCount)||0);
+   target.eks=(Number(target.eks)||0)+(Number(c.eks)||0);target.koli=(Number(target.koli)||0)+(Number(c.koli)||0);
+   target.kg=(Number(target.kg)||0)+(Number(c.kg)||0);target.ton=target.kg/1000;
+   target.status=[...new Set([target.status,c.status].filter(Boolean))].join(' | ');
+  }else planRows.push({...c,ton:(Number(c.kg)||0)/1000});
+ });
+ const withJakarta=[];
+ planRows.forEach(g=>{if(/JAKARTA/i.test(g.branch)){['JAKARTA DIRECT','JAKARTA RETAIL'].forEach(n=>withJakarta.push({...g,branch:n,doCount:0,eks:0,koli:0,kg:0,ton:0,status:'',manualJakarta:true}));}else withJakarta.push(g)});
+ planRows=withJakarta.map(g=>{let up=unitPlan(g.branch,g.kg);return {...g,unitType:up.label,unitDetail:up.detail,loadingStage:loadingStage(g.branch)}});
+ planRows.sort((a,b)=>a.date.localeCompare(b.date)||compareBranches(a.branch,b.branch));
 }
 function fillSelect(id,items,allLabel){let el=$(id),old=el.value;el.innerHTML='<option value="all">'+allLabel+'</option>'+items.map(v=>'<option value="'+esc(v)+'">'+esc(v)+'</option>').join('');if(items.includes(old))el.value=old}
 function renderAll(){
  makeDetails();let branchNames=[...new Set(branchRows.map(x=>x.branch))].sort(compareBranches);fillSelect('realBranch',branchNames,'Semua cabang');fillSelect('detailBranch',[...new Set(detailRows.map(x=>x.branch))].sort(compareBranches),'Semua cabang');
  $('sBranch').textContent=fmt(new Set(branchRows.map(x=>x.branch)).size);$('sDO').textContent=fmt(new Set(detailRows.map(x=>x.doNo)).size);$('sQty').textContent=fmt(detailRows.reduce((s,x)=>s+x.eks,0));$('sKoli').textContent=fmt(detailRows.reduce((s,x)=>s+x.koli,0));let kg=detailRows.reduce((s,x)=>s+x.kg,0);$('sKg').textContent=fmt(kg);$('sTon').textContent=fmtTon(kg/1000);
- const totalDO=new Set(detailRows.map(x=>String(x.doNo||'').trim().toUpperCase()).filter(Boolean)).size;
- const totalEks=detailRows.reduce((sum,x)=>sum+(Number(x.eks)||0),0), totalKoli=detailRows.reduce((sum,x)=>sum+(Number(x.koli)||0),0), totalKg=detailRows.reduce((sum,x)=>sum+(Number(x.kg)||0),0);
+ const totalDO=planRows.reduce((sum,x)=>sum+(Number(x.doCount)||0),0);
+ const totalEks=planRows.reduce((sum,x)=>sum+(Number(x.eks)||0),0), totalKoli=planRows.reduce((sum,x)=>sum+(Number(x.koli)||0),0), totalKg=planRows.reduce((sum,x)=>sum+(Number(x.kg)||0),0);
  $('totalDOValue').textContent=fmt(totalDO);$('totalEksValue').textContent=fmt(totalEks);$('totalKoliValue').textContent=fmt(totalKoli);$('totalKgValue').textContent=fmt(totalKg);
- $('branchBody').innerHTML=(branchRows.length?branchRows.map((g,i)=>{let jakarta=/JAKARTA/i.test(g.branch);return '<tr><td>'+(i+1)+'</td><td>'+esc(g.date)+'</td><td>'+esc(g.branch)+'</td><td>'+(jakarta?'':fmt(g.doCount))+'</td><td>'+(jakarta?'':fmt(g.eks))+'</td><td>'+(jakarta?'':fmt(g.koli))+'</td><td>'+(jakarta?'':fmt(g.kg))+'</td><td>'+(jakarta?'':fmtTon(g.ton))+'</td><td title="'+esc(g.unitDetail||'')+'">'+(jakarta?'':esc(g.unitType||''))+'</td><td>'+esc(g.loadingStage||'')+'</td><td>'+(jakarta?'':esc(g.status||'-'))+'</td></tr>'}).join(''):'<tr><td colspan="11" class="empty">Tidak ada data cocok. Periksa pilihan lembar, Warehouse, dan status.</td></tr>')+(branchRows.length?'<tr class="total-row"><td colspan="3"><strong>TOTAL</strong></td><td><strong>'+fmt(totalDO)+'</strong></td><td><strong>'+fmt(totalEks)+'</strong></td><td><strong>'+fmt(totalKoli)+'</strong></td><td><strong>'+fmt(totalKg)+'</strong></td><td><strong>'+fmtTon(totalKg/1000)+'</strong></td><td colspan="3"></td></tr>':'');
+ $('branchBody').innerHTML=(planRows.length?planRows.map((g,i)=>{let jakarta=/JAKARTA/i.test(g.branch);return '<tr><td>'+(i+1)+'</td><td>'+esc(g.date)+'</td><td>'+esc(g.branch)+'</td><td>'+(jakarta?'':fmt(g.doCount))+'</td><td>'+(jakarta?'':fmt(g.eks))+'</td><td>'+(jakarta?'':fmt(g.koli))+'</td><td>'+(jakarta?'':fmt(g.kg))+'</td><td>'+(jakarta?'':fmtTon(g.ton))+'</td><td title="'+esc(g.unitDetail||'')+'">'+(jakarta?'':esc(g.unitType||''))+'</td><td>'+esc(g.loadingStage||'')+'</td><td>'+(jakarta?'':esc(g.status||'-'))+'</td></tr>'}).join(''):'<tr><td colspan="11" class="empty">Tidak ada DO yang tersisa untuk direncanakan.</td></tr>')+(planRows.length?'<tr class="total-row"><td colspan="3"><strong>TOTAL SISA</strong></td><td><strong>'+fmt(totalDO)+'</strong></td><td><strong>'+fmt(totalEks)+'</strong></td><td><strong>'+fmt(totalKoli)+'</strong></td><td><strong>'+fmt(totalKg)+'</strong></td><td><strong>'+fmtTon(totalKg/1000)+'</strong></td><td colspan="3"></td></tr>':'');
  renderDetail();renderReal();renderReport();
 }
 function currentDetail(){let d=$('detailDate').value,b=$('detailBranch').value,q=$('searchDO').value.trim().toLowerCase();let all=detailRows;return all.filter(x=>(!d||x.date===d)&&(b==='all'||canonicalBranch(x.branch)===canonicalBranch(b))&&(!q||String(x.doNo).toLowerCase().includes(q)))}
