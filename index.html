@@ -217,8 +217,16 @@ function makeDetails(){
   {date:'2026-10-27',branch:'MANADO',doCount:20,eks:4598,koli:41,kg:1325,status:'Next kiriman selanjutnya — sisa 27 Okt',carryover:true},
   {date:'2026-10-27',branch:'SAMARINDA',doCount:8,eks:178,koli:16,kg:492,status:'Next kiriman selanjutnya — sisa 27 Okt',carryover:true}
  ];try{localStorage.setItem(CARRYOVER_KEY,JSON.stringify(carryovers));}catch(e){}}
+ // Hilangkan acuan awal lama untuk cabang yang sudah masuk Laporan Kirim.
+ // Sisa yang belum terpenuhi tetap dikelola oleh autoBranchSummary dari rekonsiliasi realisasi.
+ const reportedBranches=new Set(Object.entries(realState||{}).filter(([k,z])=>z&&z.dispatchStatus==='today').map(([k,z])=>canonicalBranch(k.split('|').slice(1).join('|'))));
+ const filteredCarryovers=carryovers.filter(c=>!(c.carryover&&!c.autoBranchSummary&&reportedBranches.has(canonicalBranch(c.branch))));
+ if(filteredCarryovers.length!==carryovers.length){
+  carryovers=filteredCarryovers;
+  try{localStorage.setItem(CARRYOVER_KEY,JSON.stringify(carryovers))}catch(e){}
+  queueCloudSave();
+ }
  // Tambahkan rekap sisa kiriman ke rencana cabang yang sama, bukan sebagai baris terpisah.
- // Jika cabang muncul dalam impor baru (mis. Semarang 4 DO), jumlahnya menjadi 31 + 4 = 35 DO.
  carryovers.forEach(c=>{
   if(c.autoBranchSummary)return;
   const matches=baseRows.filter(x=>canonicalBranch(x.branch)===canonicalBranch(c.branch));
