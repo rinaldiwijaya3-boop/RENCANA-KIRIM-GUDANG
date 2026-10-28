@@ -249,7 +249,7 @@ function reconcileNextShipment(k,actual){
   const originals=sourceDetailRows.filter(x=>x.date===date&&canonicalBranch(x.branch)===branch&&!x.manualJakarta);
   if(!originals.length)return;
   const ordered=[...originals].sort((a,b)=>String(a.doNo).localeCompare(String(b.doNo),undefined,{numeric:true,sensitivity:'base'}));
-  const old=realState[k]||{},signature='rule-v3|'+[actual.doCount,actual.eks,actual.koli,actual.kg].join('|');
+  const old=realState[k]||{},signature='rule-v4|'+[actual.doCount,actual.eks,actual.koli,actual.kg].join('|');
   if(old.reconciledSignature===signature)return;
   const plannedTotals={
    doCount:ordered.length,
