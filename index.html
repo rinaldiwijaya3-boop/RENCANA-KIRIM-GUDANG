@@ -213,38 +213,59 @@ function doIdentity(x){return [String(x.date||''),canonicalBranch(x.branch),Stri
 function manualKey(date,branch){let b=branch==='JAKARTA DIRECT'?'JAKARTA DIREK':branch;return date+'|'+b}
 function renderReal(){let d=$('realDate').value,b=$('realBranch').value,arr=branchRows.filter(x=>(!d||x.date===d)&&(b==='all'||x.branch===b));$('realBody').innerHTML=arr.length?arr.map((x,i)=>{let manual=!!x.manualJakarta,z=jakartaRealState[manualKey(x.date,x.branch)]||{},rk=manualKey(x.date,x.branch),rz=realState[rk]||{},dispatch=rz.dispatchStatus||'',doValue=rz.doCount??(manual?(z.doCount??''):x.doCount),eksValue=rz.eks??(manual?(z.eks??''):x.eks),koliValue=rz.koli??(manual?(z.koli??''):x.koli),kgValue=rz.kg??(manual?(z.kg??''):x.kg);return '<tr><td>'+(i+1)+'</td><td>'+esc(x.date)+'</td><td>'+esc(x.branch)+'</td><td><input type="number" min="0" step="1" data-realfield="doCount" data-realkey="'+esc(rk)+'" value="'+esc(doValue)+'" style="width:95px" aria-label="Jumlah DO"></td><td><input type="number" min="0" step="1" data-realfield="eks" data-realkey="'+esc(rk)+'" value="'+esc(eksValue)+'" style="width:95px" aria-label="Jumlah EKS"></td><td><input type="number" min="0" step="1" data-realfield="koli" data-realkey="'+esc(rk)+'" value="'+esc(koliValue)+'" style="width:95px" aria-label="Koli"></td><td><input type="number" min="0" step="1" data-realfield="kg" data-realkey="'+esc(rk)+'" value="'+esc(kgValue)+'" style="width:95px" aria-label="KG"></td><td>'+fmtTon((Number(kgValue)||0)/1000)+'</td><td title="'+esc(x.unitDetail||'')+'"><input type="text" data-unitreal="'+esc(rk)+'" value="'+esc(rz.unitType??x.unitType??'')+'" placeholder="Jenis unit" style="min-width:125px;width:100%"></td><td>'+esc(x.loadingStage||'')+'</td><td><input type="text" data-realfield="suratJalan" data-realkey="'+esc(rk)+'" value="'+esc(rz.suratJalan??'')+'" placeholder="No. surat jalan" style="min-width:135px;width:100%"></td><td><input type="text" data-realfield="eta" data-realkey="'+esc(rk)+'" value="'+esc(rz.eta||estimateTransit(x.branch))+'" placeholder="Otomatis" aria-label="Estimasi waktu tiba" style="min-width:120px;width:100%"></td><td><select data-dispatch="'+esc(rk)+'" style="min-width:190px"><option value="" '+(!dispatch?'selected':'')+'>Pilih konfirmasi...</option><option value="today" '+(dispatch==='today'?'selected':'')+'>Dikirim hari ini</option><option value="next" '+(dispatch==='next'?'selected':'')+'>Next kiriman selanjutnya</option></select></td></tr>'}).join(''):'<tr><td colspan="13" class="empty">Belum ada data untuk tanggal/cabang yang dipilih.</td></tr>'; document.querySelectorAll('#realBody [data-realfield],#realBody [data-unitreal],#realBody [data-dispatch]').forEach(el=>{el.disabled=!isAdmin();el.style.cursor=isAdmin()?'text':'not-allowed';if(isAdmin())el.style.backgroundColor='#fff';}); }
 function reconcileNextShipment(k,actual){
- const parts=k.split('|'),date=parts[0],branch=canonicalBranch(parts.slice(1).join('|'));
- const originals=sourceDetailRows.filter(x=>x.date===date&&canonicalBranch(x.branch)===branch&&!x.manualJakarta);
- if(!originals.length)return;
- const ordered=[...originals].sort((a,b)=>String(a.doNo).localeCompare(String(b.doNo),undefined,{numeric:true,sensitivity:'base'}));
- const old=realState[k]||{},signature=[actual.doCount,actual.eks,actual.koli,actual.kg].join('|');
- if(old.reconciledSignature===signature)return;
- const count=Math.max(0,Math.floor(Number(actual.doCount)||0));
- const target={eks:Number(actual.eks)||0,koli:Number(actual.koli)||0,kg:Number(actual.kg)||0};
- let match=null,visited=0;
- function search(start,chosen,sums){
-  if(match||visited>250000)return;
-  visited++;
-  if(chosen.length===count){
-   if(Math.abs(sums.eks-target.eks)<0.01&&Math.abs(sums.koli-target.koli)<0.01&&Math.abs(sums.kg-target.kg)<0.51)match=[...chosen];
+  const parts=k.split('|'),date=parts[0],branch=canonicalBranch(parts.slice(1).join('|'));
+  const originals=sourceDetailRows.filter(x=>x.date===date&&canonicalBranch(x.branch)===branch&&!x.manualJakarta);
+  if(!originals.length)return;
+  const ordered=[...originals].sort((a,b)=>String(a.doNo).localeCompare(String(b.doNo),undefined,{numeric:true,sensitivity:'base'}));
+  const old=realState[k]||{},signature=[actual.doCount,actual.eks,actual.koli,actual.kg].join('|');
+  if(old.reconciledSignature===signature)return;
+  const planned=branchRows.find(x=>x.date===date&&canonicalBranch(x.branch)===branch&&!x.manualJakarta);
+  const plannedTotals={
+   doCount:Number(planned?.doCount??ordered.length),
+   eks:Number(planned?.eks??ordered.reduce((s,x)=>s+(Number(x.eks)||0),0)),
+   koli:Number(planned?.koli??ordered.reduce((s,x)=>s+(Number(x.koli)||0),0)),
+   kg:Number(planned?.kg??ordered.reduce((s,x)=>s+(Number(x.kg)||0),0))
+  };
+  const actualTotals={doCount:Number(actual.doCount)||0,eks:Number(actual.eks)||0,koli:Number(actual.koli)||0,kg:Number(actual.kg)||0};
+  const reduced=Object.keys(plannedTotals).filter(f=>actualTotals[f]<plannedTotals[f]-(f==='kg'?0.5:0.01));
+  // Kalau tidak ada angka yang berkurang, semua DO dianggap tetap dikirim dan tidak ada sisa baru.
+  if(!reduced.length){
+   nextDOs=nextDOs.filter(x=>!(x.date===date&&canonicalBranch(x.branch)===branch&&x.autoRealizationCarryover));
+   if(!realState[k])realState[k]={};
+   realState[k].shippedDONumbers=ordered.map(x=>String(x.doNo));
+   realState[k].matchFound=true;
+   realState[k].reconciledSignature=signature;
+   try{saveExtraDOs()}catch(e){}
    return;
   }
-  if(ordered.length-start<count-chosen.length)return;
-  for(let i=start;i<ordered.length&&!match;i++){
-   const d=ordered[i],next={eks:sums.eks+(Number(d.eks)||0),koli:sums.koli+(Number(d.koli)||0),kg:sums.kg+(Number(d.kg)||0)};
-   if(next.eks<=target.eks&&next.koli<=target.koli&&next.kg<=target.kg+0.5)search(i+1,[...chosen,d],next);
+  let match=null,visited=0;
+  const close=(f,v)=>Math.abs(v-actualTotals[f])<(f==='kg'?0.51:0.01);
+  function search(start,chosen,sums){
+   if(match||visited>250000)return;
+   visited++;
+   if(chosen.length>0&&reduced.every(f=>f==='doCount'?chosen.length===actualTotals.doCount:close(f,sums[f]))){
+    if(!reduced.includes('doCount')||chosen.length===actualTotals.doCount)match=[...chosen];
+    return;
+   }
+   if(reduced.includes('doCount')&&chosen.length>=actualTotals.doCount)return;
+   for(let i=start;i<ordered.length&&!match;i++){
+    const d=ordered[i],next={eks:sums.eks+(Number(d.eks)||0),koli:sums.koli+(Number(d.koli)||0),kg:sums.kg+(Number(d.kg)||0)};
+    const nextCount=chosen.length+1;
+    let possible=true;
+    for(const f of reduced){if(f==='doCount'){if(nextCount>actualTotals.doCount)possible=false;}else if(next[f]>actualTotals[f]+(f==='kg'?0.5:0.01))possible=false;}
+    if(possible)search(i+1,[...chosen,d],next);
+   }
   }
- }
- if(count<=ordered.length)search(0,[],{eks:0,koli:0,kg:0});
- const shipped=match||[],shippedKeys=new Set(shipped.map(doIdentity));
- const generated=ordered.filter(d=>!shippedKeys.has(doIdentity(d))).map(d=>({...d,status:'Belum dikirim — next kiriman selanjutnya',carryover:true,autoRealizationCarryover:true}));
- nextDOs=nextDOs.filter(x=>!(x.date===date&&canonicalBranch(x.branch)===branch&&x.autoRealizationCarryover));
- generated.forEach(x=>nextDOs.push(x));
- if(!realState[k])realState[k]={};
- realState[k].shippedDONumbers=shipped.map(x=>String(x.doNo));
- realState[k].matchFound=!!match;
- realState[k].reconciledSignature=signature;
- try{saveExtraDOs()}catch(e){}
+  search(0,[],{eks:0,koli:0,kg:0});
+  const shipped=match||[],shippedKeys=new Set(shipped.map(doIdentity));
+  const generated=ordered.filter(d=>!shippedKeys.has(doIdentity(d))).map(d=>({...d,status:match?'Belum dikirim — next kiriman selanjutnya':'Belum cocok — periksa realisasi',carryover:true,autoRealizationCarryover:true}));
+  nextDOs=nextDOs.filter(x=>!(x.date===date&&canonicalBranch(x.branch)===branch&&x.autoRealizationCarryover));
+  generated.forEach(x=>nextDOs.push(x));
+  if(!realState[k])realState[k]={};
+  realState[k].shippedDONumbers=shipped.map(x=>String(x.doNo));
+  realState[k].matchFound=!!match;
+  realState[k].reconciledSignature=signature;
+  try{saveExtraDOs()}catch(e){}
 }
 function saveReal(){document.querySelectorAll('[data-jreal]').forEach(el=>{let k=el.dataset.jreal,f=el.dataset.field;if(!jakartaRealState[k])jakartaRealState[k]={};jakartaRealState[k][f]=el.value===''?'':Math.max(0,Number(el.value)||0)});document.querySelectorAll('[data-unitreal]').forEach(el=>{let k=el.dataset.unitreal;if(!realState[k])realState[k]={};realState[k].unitType=el.value.trim()});document.querySelectorAll('[data-realfield]').forEach(el=>{let k=el.dataset.realkey,f=el.dataset.realfield;if(!realState[k])realState[k]={};realState[k][f]=['doCount','eks','koli','kg'].includes(f)?(el.value===''?'':Math.max(0,Number(el.value)||0)):el.value.trim()});try{document.querySelectorAll('#realBody tr').forEach(tr=>{const first=tr.querySelector('[data-realfield="doCount"]');if(!first)return;const k=first.dataset.realkey,z=realState[k]||{};if(['doCount','eks','koli','kg'].every(f=>z[f]!==undefined&&z[f]!==''))reconcileNextShipment(k,z)});localStorage.setItem(JAKARTA_KEY,JSON.stringify(jakartaRealState));localStorage.setItem(KEY,JSON.stringify(realState));$('realMsg').textContent='Realisasi tersimpan. Sisa tiap DO otomatis masuk ke Rencana Kirim berikutnya.';queueCloudSave();renderAll();alert('Realisasi berhasil disimpan dan sisa DO dihitung untuk kiriman selanjutnya.');}catch(e){$('realMsg').textContent='Gagal menyimpan ke penyimpanan browser. Coba buka file di Chrome/Edge biasa dan pastikan penyimpanan situs tidak diblokir.';alert('Gagal menyimpan. Periksa pengaturan penyimpanan browser.')}}
 function reportRows(){let d=$('reportDate').value;return branchRows.filter(x=>{let z=realState[manualKey(x.date,x.branch)]||{};return (!d||x.date===d)&&z.dispatchStatus==='today'})}
