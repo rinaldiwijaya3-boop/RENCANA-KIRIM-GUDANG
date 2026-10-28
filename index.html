@@ -219,12 +219,11 @@ function reconcileNextShipment(k,actual){
   const ordered=[...originals].sort((a,b)=>String(a.doNo).localeCompare(String(b.doNo),undefined,{numeric:true,sensitivity:'base'}));
   const old=realState[k]||{},signature=[actual.doCount,actual.eks,actual.koli,actual.kg].join('|');
   if(old.reconciledSignature===signature)return;
-  const planned=branchRows.find(x=>x.date===date&&canonicalBranch(x.branch)===branch&&!x.manualJakarta);
   const plannedTotals={
-   doCount:Number(planned?.doCount??ordered.length),
-   eks:Number(planned?.eks??ordered.reduce((s,x)=>s+(Number(x.eks)||0),0)),
-   koli:Number(planned?.koli??ordered.reduce((s,x)=>s+(Number(x.koli)||0),0)),
-   kg:Number(planned?.kg??ordered.reduce((s,x)=>s+(Number(x.kg)||0),0))
+   doCount:ordered.length,
+   eks:ordered.reduce((s,x)=>s+(Number(x.eks)||0),0),
+   koli:ordered.reduce((s,x)=>s+(Number(x.koli)||0),0),
+   kg:ordered.reduce((s,x)=>s+(Number(x.kg)||0),0)
   };
   const actualTotals={doCount:Number(actual.doCount)||0,eks:Number(actual.eks)||0,koli:Number(actual.koli)||0,kg:Number(actual.kg)||0};
   const reduced=Object.keys(plannedTotals).filter(f=>actualTotals[f]<plannedTotals[f]-(f==='kg'?0.5:0.01));
