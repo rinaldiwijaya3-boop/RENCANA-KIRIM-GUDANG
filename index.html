@@ -148,12 +148,9 @@ function makeDetails(){
  const pendingBranches=new Set(nextDOs.map(x=>canonicalBranch(x.branch)));
  importedDetails.forEach(x=>{if(pendingBranches.has(canonicalBranch(x.branch))&&!nextDOs.some(n=>doIdentity(n)===doIdentity(x)))nextDOs.push({...x});});
  const combined=new Map();
- // Detail utama dan realisasi hanya memakai DO sumber + DO manual.
- // nextDOs (hasil sisa) tidak boleh membuat cabang/baris tambahan di Realisasi.
- [...importedDetails,...manualDOs].forEach(x=>{
-  const k=doIdentity(x);
-  if(!combined.has(k))combined.set(k,{...x,status:x.status||(x.manualEntry?'DO manual / urgent':''),manualEntry:!!x.manualEntry,ton:(Number(x.kg)||0)/1000});
- });
+ [...nextDOs.filter(x=>!manualKeys.has(doIdentity(x))),...importedDetails].forEach(x=>{const k=doIdentity(x);if(!combined.has(k))combined.set(k,{...x});else if(importedDetails.includes(x)&&!nextDOs.some(n=>doIdentity(n)===k)){const g=combined.get(k);g.eks=x.eks;g.koli=x.koli;g.kg=x.kg;g.ton=x.ton;g.status=x.status;}});
+ // Gabungkan DO tambahan manual ke data detail utama agar otomatis masuk Rencana Kirim dan total cabang.
+ [...manualDOs].forEach(x=>{const k=doIdentity(x);if(!combined.has(k))combined.set(k,{...x,status:x.status||'DO manual / urgent',manualEntry:true,ton:(Number(x.kg)||0)/1000});});
  detailRows=[...combined.values()].sort((a,b)=>a.date.localeCompare(b.date)||compareBranches(a.branch,b.branch)||a.doNo.localeCompare(b.doNo));
  try{saveExtraDOs()}catch(e){}
  let bg=new Map();
@@ -204,45 +201,17 @@ function makeDetails(){
  let pendingMap=new Map();
  const realEntryFor=(date,branch)=>{
   const direct=manualKey(date,branch);
-  const directState=realState[direct];
-  if(directState&&directState.reconciledSignature)return directState;
-  const found=Object.keys(realState||{}).find(k=>{const p=k.split('|');return p[0]===date&&canonicalBranch(p.slice(1).join('|'))===canonicalBranch(branch)&&(realState[k]||{}).reconciledSignature;});
-  if(found)return realState[found]||{};
-  // Jika tanggal sumber berbeda dari tanggal realisasi, gunakan rekonsiliasi terbaru cabang tersebut.
-  const target=canonicalBranch(branch);
-  const candidates=Object.keys(realState||{}).filter(k=>{const p=k.split('|');return canonicalBranch(p.slice(1).join('|'))===target&&(realState[k]||{}).reconciledSignature;}).sort((a,b)=>b.split('|')[0].localeCompare(a.split('|')[0]));
-  if(candidates.length)return realState[candidates[0]]||{};
-  if(directState)return directState;
-  const any=Object.keys(realState||{}).find(k=>{const p=k.split('|');return p[0]===date&&canonicalBranch(p.slice(1).join('|'))===canonicalBranch(branch)});
-  return any?(realState[any]||{}):{};
+  if(realState[direct])return realState[direct];
+  const found=Object.keys(realState||{}).find(k=>{const p=k.split('|');return p[0]===date&&canonicalBranch(p.slice(1).join('|'))===canonicalBranch(branch)});
+  return found?realState[found]||{}:{};
  };
- const nextDay=date=>{
-  const m=String(date||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if(!m)return date;
-  const d=new Date(Date.UTC(Number(m[1]),Number(m[2])-1,Number(m[3])+1));
-  return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0');
- };
- // Rencana memakai DO sumber yang belum terkirim. Bila tanggal 28 sudah direalisasikan,
- // sisa dipindah ke tanggal rencana berikutnya (29), bukan ditumpuk ke tanggal lama.
  detailRows.forEach(d=>{
   const rz=realEntryFor(d.date,d.branch);
-  const branch=canonicalBranch(d.branch);
-  const shipped=Array.isArray(rz.shippedDONumbers)&&rz.shippedDONumbers.some(n=>normalizeDONumber(n)===normalizeDONumber(d.doNo));
-  // Kalau cabang sudah direkonsiliasi, yang ditampilkan hanya DO sisa.
+  const shipped=Array.isArray(rz.shippedDONumbers)&&rz.shippedDONumbers.map(String).includes(String(d.doNo));
   if(rz.reconciledSignature&&shipped)return;
-  // DO asal Bali/Banjarmasin yang tidak masuk daftar sisa tidak boleh otomatis ikut lagi
-  // dari data Excel; ambil hanya DO yang benar-benar tercatat sebagai antrean nextDOs.
-  if(rz.reconciledSignature&&['BALI','BANJARMASIN'].includes(branch)){
-   const pendingIds=new Set(nextDOs.filter(n=>canonicalBranch(n.branch)===branch&&String(n.date)===String(d.date)).map(n=>normalizeDONumber(n.doNo)));
-   if(!pendingIds.has(normalizeDONumber(d.doNo))&&!shipped)return;
-  }
-  const planDate=rz.reconciledSignature?nextDay(d.date):d.date;
-  const key=planDate+'|'+d.branch;
-  if(!pendingMap.has(key))pendingMap.set(key,{date:planDate,branch:d.branch,dos:new Set(),eks:0,koli:0,kg:0,statuses:new Set()});
-  const g=pendingMap.get(key);
-  const id=String(d.doNo);
-  if(g.dos.has(id))return;
-  g.dos.add(id);g.eks+=Number(d.eks)||0;g.koli+=Number(d.koli)||0;g.kg+=Number(d.kg)||0;
+  const key=d.date+'|'+d.branch;
+  if(!pendingMap.has(key))pendingMap.set(key,{date:d.date,branch:d.branch,dos:new Set(),eks:0,koli:0,kg:0,statuses:new Set()});
+  const g=pendingMap.get(key);g.dos.add(String(d.doNo));g.eks+=Number(d.eks)||0;g.koli+=Number(d.koli)||0;g.kg+=Number(d.kg)||0;
   String(d.status||'').split(', ').filter(Boolean).forEach(st=>g.statuses.add(st));
  });
  planRows=[...pendingMap.values()].map(g=>({...g,doCount:g.dos.size,ton:g.kg/1000,status:[...g.statuses].join(', ')}));
@@ -278,8 +247,7 @@ function loadRealState(){try{realState=JSON.parse(localStorage.getItem(KEY)||'{}
 function loadJakartaRealState(){try{jakartaRealState=JSON.parse(localStorage.getItem(JAKARTA_KEY)||'{}')||{}}catch(e){jakartaRealState={}}}
 function loadExtraDOs(){try{manualDOs=JSON.parse(localStorage.getItem(MANUAL_DO_KEY)||'[]')||[]}catch(e){manualDOs=[]}try{nextDOs=JSON.parse(localStorage.getItem(NEXT_DO_KEY)||'[]')||[]}catch(e){nextDOs=[]}}
 function saveExtraDOs(){localStorage.setItem(MANUAL_DO_KEY,JSON.stringify(manualDOs));localStorage.setItem(NEXT_DO_KEY,JSON.stringify(nextDOs))}
-function normalizeDONumber(v){return String(v??'').trim().toUpperCase().replace(/\\s+/g,'')}
-function doIdentity(x){return [String(x.date||''),canonicalBranch(x.branch),normalizeDONumber(x.doNo)].join('|')}
+function doIdentity(x){return [String(x.date||''),canonicalBranch(x.branch),String(x.doNo||'').trim().toUpperCase()].join('|')}
 function manualKey(date,branch){let b=branch==='JAKARTA DIRECT'?'JAKARTA DIREK':branch;return date+'|'+b}
 function renderReal(){let d=$('realDate').value,b=$('realBranch').value,arr=branchRows.filter(x=>(!d||x.date===d)&&(b==='all'||x.branch===b));$('realBody').innerHTML=arr.length?arr.map((x,i)=>{let manual=!!x.manualJakarta,z=jakartaRealState[manualKey(x.date,x.branch)]||{},rk=manualKey(x.date,x.branch),rz=realState[rk]||{},dispatch=rz.dispatchStatus||'',doValue=rz.doCount??(manual?(z.doCount??''):x.doCount),eksValue=rz.eks??(manual?(z.eks??''):x.eks),koliValue=rz.koli??(manual?(z.koli??''):x.koli),kgValue=rz.kg??(manual?(z.kg??''):x.kg);return '<tr><td>'+(i+1)+'</td><td>'+esc(x.date)+'</td><td>'+esc(x.branch)+'</td><td><input type="number" min="0" step="1" data-realfield="doCount" data-realkey="'+esc(rk)+'" value="'+esc(doValue)+'" style="width:95px" aria-label="Jumlah DO"></td><td><input type="number" min="0" step="1" data-realfield="eks" data-realkey="'+esc(rk)+'" value="'+esc(eksValue)+'" style="width:95px" aria-label="Jumlah EKS"></td><td><input type="number" min="0" step="1" data-realfield="koli" data-realkey="'+esc(rk)+'" value="'+esc(koliValue)+'" style="width:95px" aria-label="Koli"></td><td><input type="number" min="0" step="1" data-realfield="kg" data-realkey="'+esc(rk)+'" value="'+esc(kgValue)+'" style="width:95px" aria-label="KG"></td><td>'+fmtTon((Number(kgValue)||0)/1000)+'</td><td title="'+esc(x.unitDetail||'')+'"><input type="text" data-unitreal="'+esc(rk)+'" value="'+esc(rz.unitType??x.unitType??'')+'" placeholder="Jenis unit" style="min-width:125px;width:100%"></td><td>'+esc(x.loadingStage||'')+'</td><td><input type="text" data-realfield="suratJalan" data-realkey="'+esc(rk)+'" value="'+esc(rz.suratJalan??'')+'" placeholder="No. surat jalan" style="min-width:135px;width:100%"></td><td><input type="text" data-realfield="eta" data-realkey="'+esc(rk)+'" value="'+esc(rz.eta||estimateTransit(x.branch))+'" placeholder="Otomatis" aria-label="Estimasi waktu tiba" style="min-width:120px;width:100%"></td><td><select data-dispatch="'+esc(rk)+'" style="min-width:190px"><option value="" '+(!dispatch?'selected':'')+'>Pilih konfirmasi...</option><option value="today" '+(dispatch==='today'?'selected':'')+'>Dikirim hari ini</option><option value="next" '+(dispatch==='next'?'selected':'')+'>Next kiriman selanjutnya</option></select></td></tr>'}).join(''):'<tr><td colspan="13" class="empty">Belum ada data untuk tanggal/cabang yang dipilih.</td></tr>'; document.querySelectorAll('#realBody [data-realfield],#realBody [data-unitreal],#realBody [data-dispatch]').forEach(el=>{el.disabled=!isAdmin();el.style.cursor=isAdmin()?'text':'not-allowed';if(isAdmin())el.style.backgroundColor='#fff';}); }
 function reconcileNextShipment(k,actual){
@@ -287,7 +255,7 @@ function reconcileNextShipment(k,actual){
   const originals=sourceDetailRows.filter(x=>x.date===date&&canonicalBranch(x.branch)===branch&&!x.manualJakarta);
   if(!originals.length)return;
   const ordered=[...originals].sort((a,b)=>String(a.doNo).localeCompare(String(b.doNo),undefined,{numeric:true,sensitivity:'base'}));
-  const old=realState[k]||{},signature='rule-v5|'+[actual.doCount,actual.eks,actual.koli,actual.kg].join('|');
+  const old=realState[k]||{},signature='rule-v4|'+[actual.doCount,actual.eks,actual.koli,actual.kg].join('|');
   if(old.reconciledSignature===signature)return;
   const plannedTotals={
    doCount:ordered.length,
