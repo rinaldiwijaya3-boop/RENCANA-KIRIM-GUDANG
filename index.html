@@ -256,7 +256,29 @@ function reconcileNextShipment(k,actual){
    }
   }
   search(0,[],{eks:0,koli:0,kg:0});
-  const shipped=match||[],shippedKeys=new Set(shipped.map(doIdentity));
+  // Jika jumlah DO realisasi lebih kecil tetapi angka EKS/koli/KG tidak cocok persis,
+  // tetap pilih jumlah DO yang benar dengan selisih total terkecil. Tandai perlu pemeriksaan.
+  let fallbackMatch=null;
+  if(!match&&reduced.includes('doCount')&&actualTotals.doCount>0&&actualTotals.doCount<=ordered.length){
+   let bestScore=Infinity,bestVisited=0;
+   function findClosest(start,chosen,sums){
+    if(bestVisited>250000)return;
+    bestVisited++;
+    if(chosen.length===actualTotals.doCount){
+     let score=0;
+     reduced.filter(f=>f!=='doCount').forEach(f=>{const scale=Math.max(Math.abs(actualTotals[f]),1);score+=Math.abs(sums[f]-actualTotals[f])/scale;});
+     if(score<bestScore){bestScore=score;fallbackMatch=[...chosen];}
+     return;
+    }
+    for(let i=start;i<ordered.length;i++){
+     if(ordered.length-i<actualTotals.doCount-chosen.length)break;
+     const d=ordered[i];
+     findClosest(i+1,[...chosen,d],{eks:sums.eks+(Number(d.eks)||0),koli:sums.koli+(Number(d.koli)||0),kg:sums.kg+(Number(d.kg)||0)});
+    }
+   }
+   findClosest(0,[],{eks:0,koli:0,kg:0});
+  }
+  const shipped=match||fallbackMatch||[],shippedKeys=new Set(shipped.map(doIdentity));
   const generated=ordered.filter(d=>!shippedKeys.has(doIdentity(d))).map(d=>({...d,status:match?'Belum dikirim — next kiriman selanjutnya':'Belum cocok — periksa realisasi',carryover:true,autoRealizationCarryover:true}));
   nextDOs=nextDOs.filter(x=>!(x.date===date&&canonicalBranch(x.branch)===branch&&x.autoRealizationCarryover));
   generated.forEach(x=>nextDOs.push(x));
