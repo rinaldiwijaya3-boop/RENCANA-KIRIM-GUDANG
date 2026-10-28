@@ -175,6 +175,7 @@ function makeDetails(){
  // Tambahkan rekap sisa kiriman ke rencana cabang yang sama, bukan sebagai baris terpisah.
  // Jika cabang muncul dalam impor baru (mis. Semarang 4 DO), jumlahnya menjadi 31 + 4 = 35 DO.
  carryovers.forEach(c=>{
+  if(c.autoBranchSummary)return;
   const matches=baseRows.filter(x=>canonicalBranch(x.branch)===canonicalBranch(c.branch));
   if(matches.length){
    // Gabungkan sisa ke baris tanggal impor paling baru untuk cabang tersebut.
