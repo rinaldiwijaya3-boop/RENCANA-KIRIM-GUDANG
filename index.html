@@ -334,9 +334,9 @@ function migrateSavedRealizations(){
  Object.keys(realState||{}).forEach(k=>{
   const z=realState[k]||{};
   if(['doCount','eks','koli','kg'].every(f=>z[f]!==undefined&&z[f]!=='')){
-   const before=z.reconciledSignature;
-   reconcileNextShipment(k,z);
-   if((realState[k]||{}).reconciledSignature!==before)changed=true;
+   const before=z.summarySignature;
+   reconcileBranchSummary(k,z);
+   if((realState[k]||{}).summarySignature!==before)changed=true;
   }
  });
  if(changed){
