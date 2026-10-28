@@ -351,6 +351,7 @@ $('realBody').addEventListener('change',e=>{
   else {realState[k].dispatchStatus=chosen; if(chosen==='next'){const parts=k.split('|'),dt=parts[0],br=canonicalBranch(parts.slice(1).join('|'));detailRows.filter(x=>x.date===dt&&canonicalBranch(x.branch)===br&&!manualDOs.some(m=>doIdentity(m)===doIdentity(x))).forEach(x=>{if(!nextDOs.some(n=>doIdentity(n)===doIdentity(x)))nextDOs.push({...x});});try{saveExtraDOs()}catch(err){}}}
   try {
     localStorage.setItem(KEY,JSON.stringify(realState));
+    queueCloudSave();
     $('realMsg').textContent=!chosen?'Konfirmasi dihapus.':chosen==='today'?'Tersimpan: Dikirim hari ini — cabang ini tampil di Laporan Kiriman.':'Tersimpan: Next kiriman selanjutnya — cabang ini disembunyikan dari Laporan Kiriman.';
     renderReport();
   } catch(err) {
