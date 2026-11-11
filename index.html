@@ -93,7 +93,7 @@ function parseSheet(wb){
  if(hr<0)throw new Error('Header Sheet1 tidak cocok. Dibutuhkan Business Entity, Delivery Order, Quantity, dan Weight.');
  const grouped=new Map();
  for(let r=hr+1;r<rows.length;r++){const row=rows[r],doi=String(cell(row,ix.doi)||'').trim(),entity=cell(row,ix.ent),bu=String(cell(row,ix.bu)||'50').trim(),wh=String(cell(row,ix.wh)||'50').trim(),status=String(cell(row,ix.status)||'').trim().toUpperCase(),sj=cell(row,ix.sj);
- if(!/^50-DOI-/i.test(doi)||!branchName(entity)||bu!=='50'||wh!=='50'||(status&&!['OPEN ORDER','CLOSED'].includes(status))||val(sj))continue;
+ if(!/^50-DOI-/i.test(doi)||!branchName(entity)||bu!=='50'||wh!=='50'||(ix.status>=0&&!['OPEN ORDER','CLOSED'].includes(status))||val(sj))continue;
  const date=String(cell(row,ix.date)??'').trim(),key=[norm(entity),date,doi].join('|');
  if(!grouped.has(key))grouped.set(key,{branch:branchName(entity),date,doi,eks:0,koli:0,weight:0});
  const g=grouped.get(key);g.eks+=num(cell(row,ix.qty));g.koli+=num(cell(row,ix.koli));g.weight+=num(cell(row,ix.weight));
