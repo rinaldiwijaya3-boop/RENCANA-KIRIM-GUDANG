@@ -86,14 +86,43 @@ function updateAccess(){const a=isAdmin();$('access').textContent=a?'Login sebag
 async function loadCloud(){if(!db)return;try{const snap=await db.collection(COLLECTION).get(),docs=[];snap.forEach(d=>{if(d.id.startsWith(PREFIX)&&d.id!==PREFIX+'meta')docs.push({id:d.id,...d.data()})});docs.sort((a,b)=>a.id.localeCompare(b.id));data=docs.flatMap(x=>Array.isArray(x.rows)?x.rows:[]);render();$('cloud').textContent=data.length?'Data bersama dimuat: '+fmt(data.length)+' cabang.':'Belum ada data. Admin perlu mengimpor Excel.'}catch(e){$('cloud').textContent='Gagal memuat data Firebase: '+(e.code||e.message)}}
 async function saveCloud(rows,sheetCount){if(!db||!isAdmin())throw new Error('Login admin diperlukan.');const snap=await db.collection(COLLECTION).get(),old=[];snap.forEach(d=>{if(d.id.startsWith(PREFIX))old.push(d.id)});const chunks=[];for(let i=0;i<rows.length;i+=CHUNK_SIZE)chunks.push({id:PREFIX+String(Math.floor(i/CHUNK_SIZE)).padStart(6,'0'),rows:rows.slice(i,i+CHUNK_SIZE)});const ops=[...old.map(id=>({id,del:true})),...chunks.map(x=>({id:x.id,body:x}))];for(let i=0;i<ops.length;i+=400){const batch=db.batch();ops.slice(i,i+400).forEach(o=>{const ref=db.collection(COLLECTION).doc(o.id);o.del?batch.delete(ref):batch.set(ref,{rows:o.rows})});await batch.commit()}await db.collection(COLLECTION).doc(PREFIX+'meta').set({count:rows.length,sheetCount,updatedAt:new Date().toISOString(),updatedBy:user.email});data=rows;render()}
 async function saveManual(){if(!isAdmin())return;const inputs=[...$('rows').querySelectorAll('input[data-i]')];const changed=new Map();inputs.forEach(el=>{const i=Number(el.dataset.i),k=el.dataset.k;if(!changed.has(i))changed.set(i,{...data[i]});changed.get(i)[k]=el.value});changed.forEach((v,i)=>data[i]=v);await saveCloud(data,1);$('cloud').textContent='Perubahan kolom manual tersimpan.'}
+function parseBranchSheets(wb){
+ const candidates=wb.SheetNames.filter(n=>!['5','SHEET1','HASILNYA','PIVOT'].includes(String(n).trim().toUpperCase()));
+ const branchRows=new Map();let used=0,totalDoi=0;
+ for(const name of candidates){
+  const ws=wb.Sheets[name];if(!ws)continue;
+  const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:true,cellDates:true});
+  let hr=-1,ix={};
+  for(let r=0;r<Math.min(rows.length,12);r++){
+   const h=rows[r].map(v=>String(v??'').trim());
+   const doi=findHeader(h,['NO DOI','DOI','DELIVERY ORDER']),sj=findHeader(h,['NO SJ','NO SURAT JALAN','SURAT JALAN']);
+   const eks=findHeader(h,['JML EKS','EKS','JUMLAH EKS']),koli=findHeader(h,['JML KOLI','KOLI','TOTAL KOLI']),kg=findHeader(h,['KG','TOTAL KG','BERAT']);
+   if(doi>=0&&sj>=0&&eks>=0&&koli>=0&&kg>=0){hr=r;ix={doi,sj,eks,koli,kg};break}
+  }
+  if(hr<0)continue;
+  const branch=branchName(String(name).slice(0,3))||branchName(name);if(!branch)continue;
+  let lastSJ=-1;for(let r=hr+1;r<rows.length;r++)if(val(cell(rows[r],ix.sj)))lastSJ=r;
+  if(lastSJ<0)continue;used++;
+  for(let r=lastSJ+1;r<rows.length;r++){
+   const row=rows[r],doi=String(cell(row,ix.doi)||'').trim();if(!/^50-DOI-/i.test(doi))continue;
+   const rowText=row.map(v=>String(v??'')).join(' ').toUpperCase();if(rowText.includes('CANCEL'))continue;
+   if(!branchRows.has(branch))branchRows.set(branch,{branch,doiCount:0,eks:0,koli:0,kg:0,...blank()});
+   const b=branchRows.get(branch);b.doiCount++;b.eks+=num(cell(row,ix.eks));b.koli+=num(cell(row,ix.koli));b.kg+=num(cell(row,ix.kg));totalDoi++;
+  }
+ }
+ if(!used)return null;
+ return {rows:BRANCHES.map(b=>branchRows.get(b)||{branch:b,doiCount:0,eks:0,koli:0,kg:0,...blank()}),sheetCount:used,totalDoi};
+}
 function parseSheet(wb){
+ const branchResult=parseBranchSheets(wb);if(branchResult)return branchResult;
  const ws=wb.Sheets[wb.SheetNames[0]];if(!ws)throw new Error('Sheet1 tidak ditemukan.');
  const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:true,cellDates:true});let hr=-1,ix={};
  for(let r=0;r<Math.min(rows.length,20);r++){const h=rows[r].map(v=>String(v??'').trim());const doi=findHeader(h,['DELIVERY ORDER','DELIVERY ORDER NO','NO DOI','DOI']);const ent=findHeader(h,['BUSINESS ENTITY','BUSINESS ENTITY NAME','ENTITY']);const qty=findHeader(h,['QUANTITY','QTY']);const weight=findHeader(h,['WEIGHT','TOTAL WEIGHT']);if(doi>=0&&ent>=0&&qty>=0&&weight>=0){hr=r;ix={doi,ent,qty,weight,date:findHeader(h,['DATE','DO DATE','TANGGAL']),bu:findHeader(h,['BUSINESS UNIT','BUSINESS UNIT CODE']),wh:findHeader(h,['WAREHOUSE','WAREHOUSE CODE','WHAREHOUSE']),status:findHeader(h,['STATUS']),koli:findHeader(h,['TOTAL KOLI','KOLI','TOTAL KOLI QTY']),sj:findHeader(h,['NO SJ','NO SURAT JALAN','SURAT JALAN'])};break}}
  if(hr<0)throw new Error('Header Sheet1 tidak cocok. Dibutuhkan Business Entity, Delivery Order, Quantity, dan Weight.');
- const grouped=new Map();
- for(let r=hr+1;r<rows.length;r++){const row=rows[r],doi=String(cell(row,ix.doi)||'').trim(),entity=cell(row,ix.ent),bu=String(cell(row,ix.bu)||'50').trim(),wh=String(cell(row,ix.wh)||'50').trim(),status=String(cell(row,ix.status)||'').trim().toUpperCase(),sj=cell(row,ix.sj);
- if(!/^50-DOI-/i.test(doi)||!branchName(entity)||bu!=='50'||wh!=='50'||(ix.status>=0&&!['OPEN ORDER','CLOSED'].includes(status))||val(sj))continue;
+ const grouped=new Map();let lastSJRow=-1;if(ix.sj>=0){for(let r=hr+1;r<rows.length;r++)if(val(cell(rows[r],ix.sj)))lastSJRow=r;}
+ for(let r=Math.max(hr+1,lastSJRow+1);r<rows.length;r++){const row=rows[r],doi=String(cell(row,ix.doi)||'').trim(),entity=cell(row,ix.ent),bu=String(cell(row,ix.bu)||'50').trim(),wh=String(cell(row,ix.wh)||'50').trim(),status=String(cell(row,ix.status)||'').trim().toUpperCase(),sj=cell(row,ix.sj);
+ const rowText=row.map(v=>String(v??'')).join(' ').toUpperCase();if(rowText.includes('CANCEL'))continue;
+ if(!/^50-DOI-/i.test(doi)||!branchName(entity)||bu!=='50'||wh!=='50'||(ix.status>=0&&!['OPEN ORDER','CLOSED'].includes(status)))continue;
  const date=String(cell(row,ix.date)??'').trim(),key=[norm(entity),date,doi].join('|');
  if(!grouped.has(key))grouped.set(key,{branch:branchName(entity),date,doi,eks:0,koli:0,weight:0});
  const g=grouped.get(key);g.eks+=num(cell(row,ix.qty));g.koli+=num(cell(row,ix.koli));g.weight+=num(cell(row,ix.weight));
@@ -103,7 +132,7 @@ function parseSheet(wb){
 }
 $('login').addEventListener('click',async()=>{try{await auth.signInWithEmailAndPassword($('email').value.trim(),$('password').value);$('password').value=''}catch(e){alert('Login gagal: '+(e.code||e.message))}});
 $('logout').addEventListener('click',()=>auth.signOut());
-$('importBtn').addEventListener('click',async()=>{const file=$('excelFile').files[0];if(!file){setMessage('Pilih file Excel terlebih dahulu.','error');return}if(!isAdmin()){setMessage('Impor hanya bisa dilakukan admin.','error');return}try{$('importBtn').disabled=true;setMessage('Memproses Sheet1 dan menghitung rekap cabang…');const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true});const result=parseSheet(wb);const count=result.reduce((s,x)=>s+x.doiCount,0);if(!count)throw new Error('Tidak ada DOI yang memenuhi filter. Periksa header dan nilai Business Unit/Warehouse/Status.');await saveCloud(result,1);setMessage('Berhasil! '+fmt(count)+' DOI direkap menjadi '+result.length+' baris cabang.','success');$('cloud').textContent='Hasil Sheet1 tersimpan di Firebase.'}catch(e){console.error(e);setMessage('Impor gagal: '+e.message,'error')}finally{$('importBtn').disabled=false}});
+$('importBtn').addEventListener('click',async()=>{const file=$('excelFile').files[0];if(!file){setMessage('Pilih file Excel terlebih dahulu.','error');return}if(!isAdmin()){setMessage('Impor hanya bisa dilakukan admin.','error');return}try{$('importBtn').disabled=true;setMessage('Memproses Sheet1 dan menghitung rekap cabang…');const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true});const parsed=parseSheet(wb);const result=parsed.rows||parsed;const count=parsed.totalDoi??result.reduce((s,x)=>s+x.doiCount,0);if(!count)throw new Error('Tidak ada DOI yang memenuhi filter. Periksa posisi No SJ terakhir dan data setelahnya.');await saveCloud(result,parsed.sheetCount||1);setMessage('Berhasil! '+fmt(count)+' DOI dihitung dari baris setelah No SJ terakhir pada '+(parsed.sheetCount||1)+' sheet.','success');$('cloud').textContent='Hasil Sheet1 tersimpan di Firebase.'}catch(e){console.error(e);setMessage('Impor gagal: '+e.message,'error')}finally{$('importBtn').disabled=false}});
 $('rows').addEventListener('change',async e=>{if(e.target.matches('input[data-i]')){try{await saveManual();setMessage('Kolom manual berhasil disimpan.','success')}catch(err){setMessage('Gagal menyimpan: '+err.message,'error')}}});
 $('search').addEventListener('input',render);$('clearFilter').addEventListener('click',()=>{$('search').value='';render()});
 $('exportBtn').addEventListener('click',()=>{const aoa=[['NO.','CABANG','JUMLAH DOI','EKS','KOLI','KG','JENIS UNIT','LOADING','ESTIMASI LOADING UNIT','NO SRT JLN','EST TIBA','KETERANGAN'],...data.map((x,i)=>[i+1,x.branch,x.doiCount,x.eks,x.koli,Math.round(x.kg),x.unit,x.loading,x.loadingTime,x.sj,x.eta,x.note])];const ws=XLSX.utils.aoa_to_sheet(aoa);ws['!cols']=[{wch:6},{wch:22},{wch:13},{wch:12},{wch:12},{wch:12},{wch:14},{wch:12},{wch:22},{wch:18},{wch:14},{wch:28}];const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Rencana Kirim');XLSX.writeFile(wb,'rencana-pengiriman.xlsx')});
