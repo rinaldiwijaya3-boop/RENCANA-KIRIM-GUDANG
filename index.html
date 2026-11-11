@@ -13,7 +13,7 @@
 </style>
 </head>
 <body>
-<header><h1>Rencana Kirim Gudang</h1><p>Rekap otomatis data DOI dari Excel Sheet1</p></header>
+<header><h1>Rencana Kirim Gudang</h1><p>Rekap otomatis data DOI dari Excel</p></header>
 <main>
 <section class="panel">
  <div class="topline">
@@ -32,7 +32,7 @@
    <input id="excelFile" type="file" accept=".xlsx,.xls,.xlsm">
    <button id="importBtn" class="btn">Impor Excel</button>
   </div>
-  <p class="help">Impor hanya membaca Sheet1. Website memproses data mentah seperti sheet hasilnya: Business Unit 50, Warehouse 50, status Open Order/Closed, DOI 50-DOI- dan No SJ kosong. DOI, EKS, KOLI, KG direkap otomatis per cabang. Kolom operasional dapat diisi manual.</p>
+  <p class="help">Jika file berisi sheet cabang, setiap sheet dihitung mulai dari baris setelah No SJ terakhir; sheet kapasitas dan rekap diabaikan. Jika file hanya berisi Sheet1 data mentah, website memprosesnya otomatis. DOI bertuliskan CANCEL dilewati. DOI, EKS, KOLI, KG direkap otomatis per cabang. Kolom operasional dapat diisi manual.</p>
  </div>
  <div id="message" class="message">Menunggu data Rencana Kirim.</div>
  <div class="stats">
