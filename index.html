@@ -13,11 +13,11 @@
 </style>
 </head>
 <body>
-<header><h1>Rencana Kirim Gudang</h1><p>Daftar DOI yang belum memiliki surat jalan</p></header>
+<header><h1>Rencana Kirim Gudang</h1><p>Rekap otomatis data DOI dari Excel Sheet1</p></header>
 <main>
 <section class="panel">
  <div class="topline">
-  <h2>RENCANA KIRIM</h2>
+  <h2>RENCANA PENGIRIMAN DARI GUDANG PUSAT KE CABANG</h2>
   <div class="auth">
    <span id="access" class="status">Menghubungkan ke Firebase…</span>
    <input id="email" type="email" placeholder="Email admin" autocomplete="username" aria-label="Email admin">
@@ -32,61 +32,82 @@
    <input id="excelFile" type="file" accept=".xlsx,.xls,.xlsm">
    <button id="importBtn" class="btn">Impor Excel</button>
   </div>
-  <p class="help">Impor akan membaca seluruh sheet yang memiliki kolom NO DOI dan NO SJ. Hanya DOI berawalan 50-DOI- dengan NO SJ kosong yang masuk. Data impor baru menggantikan daftar Rencana Kirim versi sederhana, tanpa menghapus data lama pada penyimpanan aplikasi sebelumnya.</p>
+  <p class="help">Impor hanya membaca Sheet1. Website memproses data mentah seperti sheet hasilnya: Business Unit 50, Warehouse 50, status Open Order/Closed, DOI 50-DOI- dan No SJ kosong. DOI, EKS, KOLI, KG direkap otomatis per cabang. Kolom operasional dapat diisi manual.</p>
  </div>
  <div id="message" class="message">Menunggu data Rencana Kirim.</div>
  <div class="stats">
-  <div class="stat"><span>Total DOI belum ada SJ</span><strong id="count">0</strong></div>
+  <div class="stat"><span>Total DOI</span><strong id="count">0</strong></div>
   <div class="stat"><span>Total EKS</span><strong id="eks">0</strong></div>
-  <div class="stat"><span>Total Koli</span><strong id="koli">0</strong></div>
+  <div class="stat"><span>Total Koli</span><strong id="koli">0</strong></div><div class="stat"><span>Total KG</span><strong id="kg">0</strong></div>
  </div>
  <div class="controls">
   <input id="search" type="search" placeholder="Cari No DOI, cabang, atau keterangan…">
-  <input id="dateFilter" type="date" aria-label="Filter tanggal DOI">
+  <input id="dateFilter" type="date" aria-label="Tanggal rencana" hidden>
   <button id="clearFilter" class="btn secondary">Reset Filter</button>
   <button id="exportBtn" class="btn">Export Excel</button>
  </div>
  <div class="tablewrap">
   <table>
-   <thead><tr><th>No.</th><th>Cabang / Sheet</th><th>Tanggal</th><th>No DOI</th><th>Jumlah EKS</th><th>Jumlah Koli</th><th>KG</th><th>No SJ</th><th>Tanggal Kirim</th><th>Keterangan</th></tr></thead>
-   <tbody id="rows"><tr><td colspan="10" class="empty">Belum ada data. Admin perlu mengimpor Excel.</td></tr></tbody>
+   <thead><tr><th>No.</th><th>Cabang</th><th>Jumlah DOI</th><th>EKS</th><th>KOLI</th><th>KG</th><th>Jenis Unit</th><th>Loading</th><th>Estimasi Loading Unit</th><th>No Surat Jalan</th><th>Estimasi Tiba</th><th>Keterangan</th></tr></thead>
+   <tbody id="rows"><tr><td colspan="12" class="empty">Belum ada data. Admin perlu mengimpor Excel.</td></tr></tbody>
   </table>
  </div>
- <div class="footer">Data ditampilkan sesuai isi Excel. Baris dengan No SJ terisi dan DOI yang bukan berawalan 50-DOI- otomatis diabaikan.</div>
+ <div class="footer">Kolom Jenis Unit, Loading, Estimasi Loading Unit, No Surat Jalan, Estimasi Tiba, dan Keterangan bisa diisi manual.</div>
 </section>
 </main>
 <script>
 (function(){
-const $=id=>document.getElementById(id);
-const ADMIN_EMAIL='rinaldiwijaya3@gmail.com';
+const $=id=>document.getElementById(id), ADMIN_EMAIL='rinaldiwijaya3@gmail.com';
 const firebaseConfig={apiKey:'AIzaSyD3xWkvHyvxQPvQwJ-QMVpDSXnJ7QH01PE',authDomain:'rencana-kirim-gudang-pusat.firebaseapp.com',projectId:'rencana-kirim-gudang-pusat',storageBucket:'rencana-kirim-gudang-pusat.firebasestorage.app',messagingSenderId:'910162288439',appId:'1:910162288439:web:1b17119634d210295044b2',measurementId:'G-K3KEFDJMQ2'};
-const COLLECTION='sharedApp', PREFIX='simplePlan_', CHUNK_SIZE=180;
+const COLLECTION='sharedApp',PREFIX='simplePlan_',CHUNK_SIZE=180;
+const BRANCHES=['SURABAYA','BALI','MALANG','SURAKARTA/MDU','SEMARANG','YOGYAKARTA','CIREBON','BANDUNG','MEDAN','ACEH','P.SIANTAR','PEKANBARU','PADANG','PALEMBANG','LAMPUNG','MAKASSAR','MANADO','SAMARINDA','BANJARMASIN','PONTIANAK','KUPANG','PAPUA/JLN SUCI','BEKASI','BOGOR','BANTEN','JAKARTA DIRECT','JAKARTA RETAIL'];
+const branchMap={SBY:'SURABAYA',BLI:'BALI',MLG:'MALANG',SKT:'SURAKARTA/MDU',SMG:'SEMARANG',YGY:'YOGYAKARTA',CBN:'CIREBON',BDG:'BANDUNG',MDN:'MEDAN',BNA:'ACEH',SNT:'P.SIANTAR',PKB:'PEKANBARU',PDG:'PADANG',PLG:'PALEMBANG',LMP:'LAMPUNG',MKS:'MAKASSAR',MDO:'MANADO',SMD:'SAMARINDA',BJM:'BANJARMASIN',PTK:'PONTIANAK',KPG:'KUPANG',SON:'PAPUA/JLN SUCI',BES:'BEKASI',BGR:'BOGOR',BTN:'BANTEN',511:'JAKARTA DIRECT',513:'JAKARTA RETAIL'};
 let auth=null,db=null,user=null,data=[],ready=false;
-const branchMap={SBY:'SURABAYA',BLI:'BALI',MLG:'MALANG',SKT:'SURAKARTA/MDU',SMG:'SEMARANG',YGY:'YOGYAKARTA',CBN:'CIREBON',BDG:'BANDUNG',MDN:'MEDAN',BNA:'ACEH',SNT:'P.SIANTAR',PKB:'PEKANBARU',PDG:'PADANG',PLG:'PALEMBANG',LMP:'LAMPUNG',MKS:'MAKASSAR',MDO:'MANADO',SMD:'SAMARINDA',BJM:'BANJARMASIN',PTK:'PONTIANAK',KPG:'KUPANG',SON:'PAPUA/JLN SUCI',BES:'BEKASI',BGR:'BOGOR',BTN:'BANTEN'};
+const blank=()=>({unit:'',loading:'',loadingTime:'',sj:'',eta:'',note:''});
 function isAdmin(){return !!(user&&String(user.email||'').toLowerCase()===ADMIN_EMAIL)}
 function setMessage(t,type){$('message').textContent=t;$('message').className='message'+(type?' '+type:'')}
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function norm(v){return String(v??'').toUpperCase().replace(/[^A-Z0-9]/g,'')}
 function findHeader(headers,aliases){const hs=headers.map(norm);for(const a of aliases){const i=hs.indexOf(norm(a));if(i>=0)return i}return -1}
-function valueAt(row,index){return index>=0?row[index]:''}
-function hasValue(v){return v!==null&&v!==undefined&&String(v).trim()!==''}
-function number(v){if(typeof v==='number')return v;let s=String(v??'').trim();if(!s)return 0;if(s.includes(',')&&s.includes('.'))s=s.replace(/\./g,'').replace(',','.');else s=s.replace(',','.');return Number(s)||0}
-function dateText(v){if(v instanceof Date&&!isNaN(v)){return [v.getFullYear(),String(v.getMonth()+1).padStart(2,'0'),String(v.getDate()).padStart(2,'0')].join('-')}if(typeof v==='number'&&window.XLSX){const d=XLSX.SSF.parse_date_code(v);if(d)return [d.y,String(d.m).padStart(2,'0'),String(d.d).padStart(2,'0')].join('-')}const s=String(v??'').trim();if(!s)return '';let m=s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);if(m)return m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0');m=s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);if(m)return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');return s}
-function displayDate(v){const s=dateText(v);if(/^\d{4}-\d{2}-\d{2}$/.test(s)){const [y,m,d]=s.split('-');return d+'/'+m+'/'+y}return s}
-function branchFromSheet(sheet){const code=String(sheet).toUpperCase().match(/^[A-Z]+/);if(!code)return sheet;const prefix=code[0].slice(0,3);return branchMap[prefix]||sheet}
-function updateAccess(){const admin=isAdmin();$('access').textContent=admin?'Login sebagai ADMIN':(user?'Login sebagai pengguna':'Mode lihat saja');$('access').className='status '+(admin?'good':'');$('email').hidden=admin||!!user;$('password').hidden=admin||!!user;$('login').hidden=admin||!!user;$('logout').hidden=!user;$('adminTools').hidden=!admin}
-function filtered(){const q=$('search').value.trim().toLowerCase(),d=$('dateFilter').value;return data.filter(x=>(!d||x.date===d)&&(!q||[x.branch,x.doi,x.note].some(v=>String(v||'').toLowerCase().includes(q))))}
-function fmt(n){return (Number(n)||0).toLocaleString('id-ID',{maximumFractionDigits:2})}
-function render(){const rows=filtered();$('count').textContent=fmt(rows.length);$('eks').textContent=fmt(rows.reduce((s,x)=>s+x.eks,0));$('koli').textContent=fmt(rows.reduce((s,x)=>s+x.koli,0));$('rows').innerHTML=rows.length?rows.map((x,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(x.branch)+'</td><td>'+esc(displayDate(x.date))+'</td><td>'+esc(x.doi)+'</td><td class="num">'+fmt(x.eks)+'</td><td class="num">'+fmt(x.koli)+'</td><td class="num">'+fmt(x.kg)+'</td><td>'+esc(x.sj||'')+'</td><td>'+esc(displayDate(x.shipDate))+'</td><td>'+esc(x.note)+'</td></tr>').join(''):'<tr><td colspan="10" class="empty">Tidak ada DOI yang sesuai filter.</td></tr>'}
-async function loadCloud(){if(!db)return;try{const snap=await db.collection(COLLECTION).get();const docs=[];snap.forEach(d=>{if(d.id.startsWith(PREFIX)&&d.id!==PREFIX+'meta')docs.push({id:d.id,...d.data()})});docs.sort((a,b)=>a.id.localeCompare(b.id));data=docs.flatMap(x=>Array.isArray(x.rows)?x.rows:[]);render();$('cloud').textContent=data.length?'Data bersama dimuat: '+fmt(data.length)+' DOI.':'Belum ada data. Admin perlu mengimpor Excel.'}catch(e){$('cloud').textContent='Gagal memuat data Firebase: '+(e.code||e.message);}}
-async function saveCloud(rows,sheetCount){if(!db||!isAdmin())throw new Error('Login admin diperlukan untuk menyimpan data.');const snap=await db.collection(COLLECTION).get();const old=[];snap.forEach(d=>{if(d.id.startsWith(PREFIX))old.push(d.id)});const newDocs=[];for(let i=0;i<rows.length;i+=CHUNK_SIZE){const n=String(Math.floor(i/CHUNK_SIZE)).padStart(6,'0');newDocs.push({id:PREFIX+n,rows:rows.slice(i,i+CHUNK_SIZE)})}const operations=[...old.map(id=>({id,remove:true})),...newDocs.map(x=>({id:x.id,body:x}))];for(let i=0;i<operations.length;i+=400){const batch=db.batch();operations.slice(i,i+400).forEach(op=>{const ref=db.collection(COLLECTION).doc(op.id);if(op.remove)batch.delete(ref);else batch.set(ref,op.body)});await batch.commit()}await db.collection(COLLECTION).doc(PREFIX+'meta').set({count:rows.length,sheetCount,updatedAt:new Date().toISOString(),updatedBy:user.email});data=rows;render()}
-function parseWorkbook(wb){const out=[];let validSheets=0;for(const sheet of wb.SheetNames){const ws=wb.Sheets[sheet];if(!ws)continue;const matrix=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:true,cellDates:true});let headerRow=-1,idx={};for(let r=0;r<Math.min(matrix.length,12);r++){const h=matrix[r].map(v=>String(v??'').trim());const doi=findHeader(h,['NO DOI','NOMOR DOI','DOI']);const sj=findHeader(h,['NO SJ','NOMOR SJ','NO SURAT JALAN','SURAT JALAN']);if(doi>=0&&sj>=0){headerRow=r;idx={date:findHeader(h,['TGL DOI','TANGGAL DOI','TANGGAL']),doi,eks:findHeader(h,['JML EKS','JUMLAH EKS','EKS']),koli:findHeader(h,['JML KOLI','JUMLAH KOLI','KOLI']),kg:findHeader(h,['KG','JUMLAH KG']),sj,shipDate:findHeader(h,['TGL KIRIM','TANGGAL KIRIM']),note:findHeader(h,['KET','KETERANGAN'])};break}}if(headerRow<0)continue;validSheets++;const branch=branchFromSheet(sheet);for(let r=headerRow+1;r<matrix.length;r++){const row=matrix[r],doi=String(valueAt(row,idx.doi)??'').trim(),sj=valueAt(row,idx.sj);if(!/^50-DOI-/i.test(doi)||hasValue(sj))continue;out.push({branch,date:dateText(valueAt(row,idx.date)),doi,eks:number(valueAt(row,idx.eks)),koli:number(valueAt(row,idx.koli)),kg:number(valueAt(row,idx.kg)),sj:'',shipDate:dateText(valueAt(row,idx.shipDate)),note:String(valueAt(row,idx.note)??'').trim()})}}return {rows:out,sheetCount:validSheets}}
+function num(v){if(typeof v==='number')return v;let s=String(v??'').trim();if(!s)return 0;if(s.includes(',')&&s.includes('.'))s=s.replace(/\./g,'').replace(',','.');else s=s.replace(',','.');return Number(s)||0}
+function cell(row,idx){return idx>=0?row[idx]:''}
+function val(v){return v!==null&&v!==undefined&&String(v).trim()!==''}
+function branchName(v){const s=String(v??'').trim().toUpperCase();if(branchMap[s])return branchMap[s];const n=norm(s);for(const [k,b] of Object.entries(branchMap))if(norm(k)===n||norm(b)===n)return b;for(const b of BRANCHES)if(n.includes(norm(b)))return b;return ''}
+function render(){
+ const q=$('search').value.trim().toLowerCase(),rows=data.filter(x=>!q||x.branch.toLowerCase().includes(q));
+ const totals=rows.reduce((a,x)=>({doi:a.doi+x.doiCount,eks:a.eks+x.eks,koli:a.koli+x.koli,kg:a.kg+x.kg}),{doi:0,eks:0,koli:0,kg:0});
+ $('count').textContent=fmt(totals.doi);$('eks').textContent=fmt(totals.eks);$('koli').textContent=fmt(totals.koli);$('kg').textContent=fmt(totals.kg);
+ const admin=isAdmin();
+ $('rows').innerHTML=rows.length?rows.map((x,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(x.branch)+'</td><td class="num">'+fmt(x.doiCount)+'</td><td class="num">'+fmt(x.eks)+'</td><td class="num">'+fmt(x.koli)+'</td><td class="num">'+fmt(x.kg)+'</td>'+
+ ['unit','loading','loadingTime','sj','eta','note'].map(k=>'<td>'+(admin?'<input data-i="'+data.indexOf(x)+'" data-k="'+k+'" value="'+esc(x[k]||'')+'" style="width:'+(k==='note'?'150px':'105px')+';padding:7px;border:1px solid #cbd5e1;border-radius:5px">':esc(x[k]||''))+'</td>').join('')+'</tr>').join('')+'<tr style="font-weight:bold;background:#f1f5f9"><td colspan="2">TOTAL</td><td class="num">'+fmt(totals.doi)+'</td><td class="num">'+fmt(totals.eks)+'</td><td class="num">'+fmt(totals.koli)+'</td><td class="num">'+fmt(totals.kg)+'</td><td colspan="6"></td></tr>':'<tr><td colspan="12" class="empty">Belum ada hasil impor.</td></tr>';
+}
+function fmt(n){return (Number(n)||0).toLocaleString('id-ID',{maximumFractionDigits:0})}
+function updateAccess(){const a=isAdmin();$('access').textContent=a?'Login sebagai ADMIN':(user?'Login sebagai pengguna':'Mode lihat saja');$('access').className='status '+(a?'good':'');$('email').hidden=a||!!user;$('password').hidden=a||!!user;$('login').hidden=a||!!user;$('logout').hidden=!user; $('adminTools').hidden=!a;render()}
+async function loadCloud(){if(!db)return;try{const snap=await db.collection(COLLECTION).get(),docs=[];snap.forEach(d=>{if(d.id.startsWith(PREFIX)&&d.id!==PREFIX+'meta')docs.push({id:d.id,...d.data()})});docs.sort((a,b)=>a.id.localeCompare(b.id));data=docs.flatMap(x=>Array.isArray(x.rows)?x.rows:[]);render();$('cloud').textContent=data.length?'Data bersama dimuat: '+fmt(data.length)+' cabang.':'Belum ada data. Admin perlu mengimpor Excel.'}catch(e){$('cloud').textContent='Gagal memuat data Firebase: '+(e.code||e.message)}}
+async function saveCloud(rows,sheetCount){if(!db||!isAdmin())throw new Error('Login admin diperlukan.');const snap=await db.collection(COLLECTION).get(),old=[];snap.forEach(d=>{if(d.id.startsWith(PREFIX))old.push(d.id)});const chunks=[];for(let i=0;i<rows.length;i+=CHUNK_SIZE)chunks.push({id:PREFIX+String(Math.floor(i/CHUNK_SIZE)).padStart(6,'0'),rows:rows.slice(i,i+CHUNK_SIZE)});const ops=[...old.map(id=>({id,del:true})),...chunks.map(x=>({id:x.id,body:x}))];for(let i=0;i<ops.length;i+=400){const batch=db.batch();ops.slice(i,i+400).forEach(o=>{const ref=db.collection(COLLECTION).doc(o.id);o.del?batch.delete(ref):batch.set(ref,{rows:o.rows})});await batch.commit()}await db.collection(COLLECTION).doc(PREFIX+'meta').set({count:rows.length,sheetCount,updatedAt:new Date().toISOString(),updatedBy:user.email});data=rows;render()}
+async function saveManual(){if(!isAdmin())return;const inputs=[...$('rows').querySelectorAll('input[data-i]')];const changed=new Map();inputs.forEach(el=>{const i=Number(el.dataset.i),k=el.dataset.k;if(!changed.has(i))changed.set(i,{...data[i]});changed.get(i)[k]=el.value});changed.forEach((v,i)=>data[i]=v);await saveCloud(data,1);$('cloud').textContent='Perubahan kolom manual tersimpan.'}
+function parseSheet(wb){
+ const ws=wb.Sheets[wb.SheetNames[0]];if(!ws)throw new Error('Sheet1 tidak ditemukan.');
+ const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:true,cellDates:true});let hr=-1,ix={};
+ for(let r=0;r<Math.min(rows.length,20);r++){const h=rows[r].map(v=>String(v??'').trim());const doi=findHeader(h,['DELIVERY ORDER','DELIVERY ORDER NO','NO DOI','DOI']);const ent=findHeader(h,['BUSINESS ENTITY','BUSINESS ENTITY NAME','ENTITY']);const qty=findHeader(h,['QUANTITY','QTY']);const weight=findHeader(h,['WEIGHT','TOTAL WEIGHT']);if(doi>=0&&ent>=0&&qty>=0&&weight>=0){hr=r;ix={doi,ent,qty,weight,date:findHeader(h,['DATE','DO DATE','TANGGAL']),bu:findHeader(h,['BUSINESS UNIT','BUSINESS UNIT CODE']),wh:findHeader(h,['WAREHOUSE','WAREHOUSE CODE','WHAREHOUSE']),status:findHeader(h,['STATUS']),koli:findHeader(h,['TOTAL KOLI','KOLI','TOTAL KOLI QTY']),sj:findHeader(h,['NO SJ','NO SURAT JALAN','SURAT JALAN'])};break}}
+ if(hr<0)throw new Error('Header Sheet1 tidak cocok. Dibutuhkan Business Entity, Delivery Order, Quantity, dan Weight.');
+ const grouped=new Map();
+ for(let r=hr+1;r<rows.length;r++){const row=rows[r],doi=String(cell(row,ix.doi)||'').trim(),entity=cell(row,ix.ent),bu=String(cell(row,ix.bu)||'50').trim(),wh=String(cell(row,ix.wh)||'50').trim(),status=String(cell(row,ix.status)||'').trim().toUpperCase(),sj=cell(row,ix.sj);
+ if(!/^50-DOI-/i.test(doi)||!branchName(entity)||bu!=='50'||wh!=='50'||(status&&!['OPEN ORDER','CLOSED'].includes(status))||val(sj))continue;
+ const date=String(cell(row,ix.date)??'').trim(),key=[norm(entity),date,doi].join('|');
+ if(!grouped.has(key))grouped.set(key,{branch:branchName(entity),date,doi,eks:0,koli:0,weight:0});
+ const g=grouped.get(key);g.eks+=num(cell(row,ix.qty));g.koli+=num(cell(row,ix.koli));g.weight+=num(cell(row,ix.weight));
+ }
+ const byBranch=new Map();for(const g of grouped.values()){if(!byBranch.has(g.branch))byBranch.set(g.branch,{branch:g.branch,doiCount:0,eks:0,koli:0,kg:0,...blank()});const b=byBranch.get(g.branch);b.doiCount++;b.eks+=g.eks;b.koli+=g.koli;b.kg+=g.weight/1000+g.koli}
+ return BRANCHES.map(b=>byBranch.get(b)||{branch:b,doiCount:0,eks:0,koli:0,kg:0,...blank()});
+}
 $('login').addEventListener('click',async()=>{try{await auth.signInWithEmailAndPassword($('email').value.trim(),$('password').value);$('password').value=''}catch(e){alert('Login gagal: '+(e.code||e.message))}});
 $('logout').addEventListener('click',()=>auth.signOut());
-$('importBtn').addEventListener('click',async()=>{const file=$('excelFile').files[0];if(!file){setMessage('Pilih file Excel terlebih dahulu.','error');return}if(!isAdmin()){setMessage('Impor hanya bisa dilakukan admin.','error');return}try{$('importBtn').disabled=true;setMessage('Membaca seluruh sheet Excel. Mohon tunggu…');const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true});const result=parseWorkbook(wb);if(!result.rows.length)throw new Error('Tidak ditemukan DOI yang memenuhi syarat. Pastikan kolom NO DOI dan NO SJ tersedia.');setMessage('Ditemukan '+fmt(result.rows.length)+' DOI dari '+result.sheetCount+' sheet. Menyimpan ke Firebase…');await saveCloud(result.rows,result.sheetCount);setMessage('Berhasil! '+fmt(result.rows.length)+' DOI dari '+result.sheetCount+' sheet masuk ke Rencana Kirim. DOI dengan No SJ terisi sudah dikeluarkan.','success');$('cloud').textContent='Data tersimpan di Firebase dan dapat dilihat pengguna lain.'}catch(e){console.error(e);setMessage('Impor gagal: '+e.message,'error')}finally{$('importBtn').disabled=false}});
-$('search').addEventListener('input',render);$('dateFilter').addEventListener('change',render);$('clearFilter').addEventListener('click',()=>{$('search').value='';$('dateFilter').value='';render()});
-$('exportBtn').addEventListener('click',()=>{const rows=filtered();const aoa=[['No.','Cabang / Sheet','Tanggal','No DOI','Jumlah EKS','Jumlah Koli','KG','No SJ','Tanggal Kirim','Keterangan'],...rows.map((x,i)=>[i+1,x.branch,displayDate(x.date),x.doi,x.eks,x.koli,x.kg,x.sj,displayDate(x.shipDate),x.note])];const ws=XLSX.utils.aoa_to_sheet(aoa);ws['!cols']=[{wch:7},{wch:22},{wch:14},{wch:24},{wch:14},{wch:14},{wch:12},{wch:12},{wch:15},{wch:30}];const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Rencana Kirim');XLSX.writeFile(wb,'rencana-kirim.xlsx')});
-try{if(!firebase.apps.length)firebase.initializeApp(firebaseConfig);auth=firebase.auth();db=firebase.firestore();auth.onAuthStateChanged(async u=>{user=u;updateAccess();await loadCloud();if(!ready){ready=true}})}catch(e){$('cloud').textContent='Firebase tidak dapat dihubungkan: '+e.message}
+$('importBtn').addEventListener('click',async()=>{const file=$('excelFile').files[0];if(!file){setMessage('Pilih file Excel terlebih dahulu.','error');return}if(!isAdmin()){setMessage('Impor hanya bisa dilakukan admin.','error');return}try{$('importBtn').disabled=true;setMessage('Memproses Sheet1 dan menghitung rekap cabang…');const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true});const result=parseSheet(wb);const count=result.reduce((s,x)=>s+x.doiCount,0);if(!count)throw new Error('Tidak ada DOI yang memenuhi filter. Periksa header dan nilai Business Unit/Warehouse/Status.');await saveCloud(result,1);setMessage('Berhasil! '+fmt(count)+' DOI direkap menjadi '+result.length+' baris cabang.','success');$('cloud').textContent='Hasil Sheet1 tersimpan di Firebase.'}catch(e){console.error(e);setMessage('Impor gagal: '+e.message,'error')}finally{$('importBtn').disabled=false}});
+$('rows').addEventListener('change',async e=>{if(e.target.matches('input[data-i]')){try{await saveManual();setMessage('Kolom manual berhasil disimpan.','success')}catch(err){setMessage('Gagal menyimpan: '+err.message,'error')}}});
+$('search').addEventListener('input',render);$('clearFilter').addEventListener('click',()=>{$('search').value='';render()});
+$('exportBtn').addEventListener('click',()=>{const aoa=[['NO.','CABANG','JUMLAH DOI','EKS','KOLI','KG','JENIS UNIT','LOADING','ESTIMASI LOADING UNIT','NO SRT JLN','EST TIBA','KETERANGAN'],...data.map((x,i)=>[i+1,x.branch,x.doiCount,x.eks,x.koli,Math.round(x.kg),x.unit,x.loading,x.loadingTime,x.sj,x.eta,x.note])];const ws=XLSX.utils.aoa_to_sheet(aoa);ws['!cols']=[{wch:6},{wch:22},{wch:13},{wch:12},{wch:12},{wch:12},{wch:14},{wch:12},{wch:22},{wch:18},{wch:14},{wch:28}];const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Rencana Kirim');XLSX.writeFile(wb,'rencana-pengiriman.xlsx')});
+try{if(!firebase.apps.length)firebase.initializeApp(firebaseConfig);auth=firebase.auth();db=firebase.firestore();auth.onAuthStateChanged(async u=>{user=u;updateAccess();await loadCloud();ready=true})}catch(e){$('cloud').textContent='Firebase tidak dapat dihubungkan: '+e.message}
 })();
 </script>
 </body>
